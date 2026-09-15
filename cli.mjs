@@ -78,6 +78,8 @@ function buildCompactResult(result, searchState, requestedLimit) {
       passengers: searchState.passengers.adults,
       cabin: searchState.cabinPreference,
       rankingFocus: searchState.rankingFocus,
+      nearbyAirportMaxGroundTravelMinutes: searchState.nearbyAirportMaxGroundTravelMinutes,
+      nearbyAirportGroundCostPerHour: searchState.nearbyAirportGroundCostPerHour,
     },
     sources: result.sources,
     coverage: summarizeCoverage(result),
@@ -139,6 +141,8 @@ function summarizeItinerary(itinerary, index) {
     effectiveCost: itinerary.effectiveCost ?? null,
     durationMinutes: itinerary.totalDurationMinutes ?? itinerary.durationMinutes ?? null,
     travelMetrics: itinerary.travelMetrics ?? null,
+    airportAccess: itinerary.airportAccess ?? null,
+    groundTravelCost: itinerary.valueBreakdown?.groundTravelCost ?? 0,
     riskFlags: itinerary.riskFlags ?? [],
     qualityPenalty: itinerary.qualityPenalty ?? null,
     verification: findVerification(itinerary),
@@ -273,6 +277,10 @@ async function readSearchInput(flags, io) {
     latestReturn: flags.returnBy ?? flags.latestReturn ?? flags.return ?? input.latestReturn,
     tripType: flags.oneWay ? "one-way" : (flags.tripType ?? input.tripType),
     useNearbyAirports: flags.nearby === undefined ? input.useNearbyAirports : flags.nearby,
+    nearbyAirportMaxGroundTravelMinutes: flags.nearbyAirportMaxGroundTravelMinutes
+      ?? input.nearbyAirportMaxGroundTravelMinutes,
+    nearbyAirportGroundCostPerHour: flags.nearbyAirportGroundCostPerHour
+      ?? input.nearbyAirportGroundCostPerHour,
     dataStrategy: flags.strategy ?? input.dataStrategy,
     rankingFocus: flags.focus ?? input.rankingFocus,
     awardDataMode: flags.awards ?? input.awardDataMode,
@@ -309,7 +317,7 @@ function parseFlags(args) {
 }
 
 function hasSearchFlags(flags) {
-  return ["input", "origin", "destination", "depart", "return", "oneWay", "tripType", "stdin"].some((key) => flags[key] !== undefined);
+  return ["input", "origin", "destination", "depart", "return", "oneWay", "tripType", "stdin", "nearbyAirportMaxGroundTravelMinutes", "nearbyAirportGroundCostPerHour"].some((key) => flags[key] !== undefined);
 }
 
 function toCamelCase(value) {

@@ -180,7 +180,6 @@ async function handleProviderHealth(request, response) {
 }
 
 export async function buildProviderHealth() {
-  const amadeusConfigured = Boolean(process.env.AMADEUS_CLIENT_ID && process.env.AMADEUS_CLIENT_SECRET);
   const health = {
     ok: true,
     checkedAt: new Date().toISOString(),
@@ -199,25 +198,6 @@ export async function buildProviderHealth() {
         capabilities: SERPAPI_CAPABILITIES,
       },
       {
-        id: "amadeus-flight-offers",
-        name: "Amadeus Flight Offers",
-        capability: "cash",
-        configured: amadeusConfigured,
-        baseUrl: AMADEUS_BASE_URL,
-        status: amadeusConfigured ? "checking" : "missing-credentials",
-        detail: amadeusConfigured
-          ? null
-          : "Set AMADEUS_CLIENT_ID and AMADEUS_CLIENT_SECRET in .env to enable live cash fares.",
-      },
-      {
-        id: "duffel",
-        name: "Duffel",
-        capability: "cash",
-        configured: Boolean(process.env.DUFFEL_API_TOKEN),
-        status: "not-implemented",
-        detail: "Live offer creation and mapping are not implemented yet.",
-      },
-      {
         id: "seats-aero",
         name: "Seats.aero Cached Awards",
         capability: "awards",
@@ -230,18 +210,6 @@ export async function buildProviderHealth() {
       },
     ],
   };
-
-  if (amadeusConfigured) {
-    const amadeus = health.providers.find((provider) => provider.id === "amadeus-flight-offers");
-    try {
-      await getAmadeusAccessToken();
-      amadeus.status = "live";
-      amadeus.detail = "Authenticated with Amadeus. Live cash fares are available.";
-    } catch (error) {
-      amadeus.status = "auth-failed";
-      amadeus.detail = `Credentials present but authentication failed: ${error.message}`;
-    }
-  }
 
   return health;
 }
@@ -354,7 +322,7 @@ function getSegmentSourceStatus(source, segment) {
 }
 
 function selectSuccessfulSources(results) {
-  const successful = results.filter(({ result }) => result.ok);
+  const successful = results.filter(({ result }) => result.ok && (result.segments?.length ?? 0) > 0);
   const primary = successful.filter(({ source }) => !source.fallback);
   return primary.length > 0 ? primary : successful;
 }
@@ -368,26 +336,12 @@ function withTimeout(promise, timeoutMs) {
 }
 
 function buildCashSourcePlan(searchState) {
-  const officialSources = [
-    {
-      id: "serpapi-google-flights",
-      name: "SerpApi Google Flights",
-      type: "official",
-      query: (searchState) => querySerpApiGoogleFlights({ searchState }),
-    },
-    {
-      id: "amadeus-flight-offers",
-      name: "Amadeus Flight Offers",
-      type: "official",
-      query: queryAmadeusStub,
-    },
-    {
-      id: "duffel",
-      name: "Duffel",
-      type: "official",
-      query: queryDuffelStub,
-    },
-  ];
+  const officialSources = [{
+    id: "serpapi-google-flights",
+    name: "SerpApi Google Flights",
+    type: "official",
+    query: (searchState) => querySerpApiGoogleFlights({ searchState }),
+  }];
   const sampleSource = {
     id: "sample-segments",
     name: "Sample Segment Inventory",
@@ -400,7 +354,7 @@ function buildCashSourcePlan(searchState) {
     return [sampleSource];
   }
 
-  return [...officialSources, sampleSource];
+  return officialSources;
 }
 
 function buildAwardSourcePlan(searchState) {
@@ -423,7 +377,7 @@ function buildAwardSourcePlan(searchState) {
   }
 
   if (searchState.dataStrategy === "official-first" || searchState.dataStrategy === "official-then-automation") {
-    return [automationSource, sampleSource];
+    return [automationSource];
   }
 
   return [sampleSource];
@@ -512,8 +466,8 @@ async function queryAmadeusStub(searchState) {
 
   const [outboundSegments, returnSegments] = await Promise.all([
     collectAmadeusSegments({
-      origins: expandAirports(searchState.origin, searchState.useNearbyAirports),
-      destinations: expandAirports(searchState.destination, searchState.useNearbyAirports),
+      origins: expandAirports(searchState.origin, searchState.useNearbyAirports, searchState.nearbyAirportMaxGroundTravelMinutes),
+      destinations: expandAirports(searchState.destination, searchState.useNearbyAirports, searchState.nearbyAirportMaxGroundTravelMinutes),
       startDate: searchState.earliestDeparture,
       endDate: searchState.latestDeparture,
       searchState,
@@ -522,8 +476,8 @@ async function queryAmadeusStub(searchState) {
       requestContext,
     }),
     collectAmadeusSegments({
-      origins: expandAirports(searchState.destination, searchState.useNearbyAirports),
-      destinations: expandAirports(searchState.origin, searchState.useNearbyAirports),
+      origins: expandAirports(searchState.destination, searchState.useNearbyAirports, searchState.nearbyAirportMaxGroundTravelMinutes),
+      destinations: expandAirports(searchState.origin, searchState.useNearbyAirports, searchState.nearbyAirportMaxGroundTravelMinutes),
       startDate: searchState.earliestReturn,
       endDate: searchState.latestReturn,
       searchState,

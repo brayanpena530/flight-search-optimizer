@@ -166,6 +166,17 @@ function dedupeObjects(items, keySelector) {
 function buildProviderWarnings(searchState, cashResolution, awardResolution) {
   const warnings = [...(cashResolution.notes ?? [])];
 
+  if (searchState.dataStrategy !== "sample-only" && cashResolution.sources?.length === 0) {
+    warnings.push("SerpApi returned no usable cash-flight results. Local sample flights are not used as an automatic fallback.");
+  }
+  if (
+    searchState.dataStrategy !== "sample-only" &&
+    searchState.awardDataMode === "cash-and-awards" &&
+    awardResolution.sources?.length === 0
+  ) {
+    warnings.push("Seats.aero returned no usable cached award results. Local sample awards are not used as an automatic fallback.");
+  }
+
   if (searchState.dataStrategy !== "sample-only" && cashResolution.sources?.some((source) => source.type === "sample") && cashResolution.sources.every((source) => source.type === "sample")) {
     warnings.push("Cash results are using local sample inventory because no live official cash provider succeeded.");
   }

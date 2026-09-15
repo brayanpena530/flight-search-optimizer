@@ -178,6 +178,8 @@ function readForm(formData) {
     origin: formData.get("origin").trim().toUpperCase(),
     destination: formData.get("destination").trim().toUpperCase(),
     useNearbyAirports: formData.get("useNearbyAirports") === "on",
+    nearbyAirportMaxGroundTravelMinutes: Number(formData.get("nearbyAirportMaxGroundTravelMinutes")),
+    nearbyAirportGroundCostPerHour: Number(formData.get("nearbyAirportGroundCostPerHour")),
     earliestDeparture: formData.get("earliestDeparture"),
     latestDeparture: formData.get("latestDeparture"),
     earliestReturn: formData.get("earliestReturn"),
@@ -644,6 +646,7 @@ function renderValueBreakdown(valueBreakdown) {
       <span>Cash saved ${formatCurrency(valueBreakdown.cashSavings)}</span>
       <span>Point value cost ${formatCurrency(valueBreakdown.pointOpportunityCost)}</span>
       <span>Time preference penalty ${formatCurrency(valueBreakdown.timePreferencePenalty)}</span>
+      <span>Nearby-airport ground cost ${formatCurrency(valueBreakdown.groundTravelCost ?? 0)}</span>
       <span>Formula total ${formatCurrency(valueBreakdown.effectiveCost)}</span>
     </div>
   `;
@@ -1031,8 +1034,8 @@ function escapeHtml(value) {
 
 function formatStrategy(strategy) {
   return {
-    "official-first": "Official APIs first",
-    "official-then-automation": "Official APIs then automation",
+    "official-first": "SerpApi and cached awards",
+    "official-then-automation": "SerpApi and cached awards (no sample fallback)",
     "sample-only": "Sample data only",
   }[strategy] ?? strategy;
 }

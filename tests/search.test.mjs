@@ -6,13 +6,14 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { runAutomationWorkers } from "../automation-workers.mjs";
 import { analyzeSearch, buildHighlightedCandidates, buildSearchInsights } from "../search-engine.mjs";
-import { AIRLINE_PROGRAMS, TRANSFER_PARTNERS, expandAirports } from "../search-config.mjs";
+import { AIRLINE_PROGRAMS, AIRPORT_METROS, TRANSFER_PARTNERS, expandAirports, getAirportAccess, getAirportMetro } from "../search-config.mjs";
 import { normalizeAndValidateSearchState } from "../search-state.mjs";
 
 const HOUSTON_NEW_YORK_SEARCH = {
   origin: "HOU",
   destination: "NYC",
   useNearbyAirports: true,
+  nearbyAirportGroundCostPerHour: 0,
   earliestDeparture: "2026-08-05",
   latestDeparture: "2026-08-06",
   earliestReturn: "2026-08-09",
@@ -238,6 +239,30 @@ test("Houston and New York airport groups expand for flexible searches", () => {
   assert.deepEqual(expandAirports("HOU", false), ["HOU"]);
 });
 
+test("expanded metro coverage maps practical alternate airports", () => {
+  assert.deepEqual(expandAirports("DFW", true), ["DFW", "DAL"]);
+  assert.deepEqual(expandAirports("DCA", true), ["DCA", "IAD", "BWI"]);
+  assert.deepEqual(expandAirports("SJC", true), ["SFO", "OAK", "SJC"]);
+  assert.deepEqual(expandAirports("PBI", true), ["MIA", "FLL", "PBI"]);
+  assert.equal(getAirportMetro("BDL")?.id, "BOS");
+  assert.equal(AIRPORT_METROS.SEA.primary, "SEA");
+});
+
+test("nearby-airport radius and access metadata are applied consistently", () => {
+  assert.deepEqual(expandAirports("HOU", true, 30), ["IAH"]);
+  assert.deepEqual(expandAirports("HOU", true, 45), ["IAH", "HOU"]);
+  assert.equal(getAirportAccess("HOU").groundTravelMinutes, 35);
+  assert.equal(getAirportAccess("IAH").isPrimary, true);
+  const { searchState, errors } = normalizeAndValidateSearchState({
+    ...HOUSTON_NEW_YORK_SEARCH,
+    nearbyAirportMaxGroundTravelMinutes: 30,
+    nearbyAirportGroundCostPerHour: 30,
+  });
+  assert.deepEqual(errors, []);
+  assert.equal(searchState.nearbyAirportMaxGroundTravelMinutes, 30);
+  assert.equal(searchState.nearbyAirportGroundCostPerHour, 30);
+});
+
 test("search state validation catches invalid flexible trip input", () => {
   const { errors } = normalizeAndValidateSearchState({
     ...HOUSTON_NEW_YORK_SEARCH,
@@ -326,7 +351,9 @@ test("backend search contract returns ranked Houston to New York results", async
   assert.equal(payload.itineraries[0].label, "Outbound Southwest balance + Return United balance");
 });
 
-test("Amadeus cash totals are normalized to per-adult segment prices", async (t) => {
+/* Legacy Amadeus cash-provider integration tests were retired when the active
+   search plan was narrowed to SerpApi cash discovery and cached awards. */
+/* test("Amadeus cash totals are normalized to per-adult segment prices", async (t) => {
   const amadeusPort = 8148;
   const appPort = 8149;
   const fakeAmadeus = await startFakeAmadeusServer(amadeusPort);
@@ -498,7 +525,9 @@ test("Amadeus rate-limit responses are retried instead of aborting the search", 
   assert(payload.itineraries.length > 0);
 });
 
-test("provider health endpoint reports live Amadeus when credentials authenticate", async (t) => {
+*/
+/* Legacy Amadeus health checks are retired with the provider. */
+/* test("provider health endpoint reports live Amadeus when credentials authenticate", async (t) => {
   const amadeusPort = 8162;
   const appPort = 8163;
   const fakeAmadeus = await startConfigurableFakeAmadeus(amadeusPort, {});
@@ -554,7 +583,8 @@ test("provider health endpoint reports missing credentials when Amadeus is uncon
   assert.equal(amadeus.status, "missing-credentials");
 });
 
-test("backend search falls back to sample awards when automation imports fail", async (t) => {
+*/
+test("backend search reports missing awards when Seats.aero and imports fail", async (t) => {
   const port = 8138;
   const server = spawn(process.execPath, ["server.mjs"], {
     env: {
@@ -593,10 +623,10 @@ test("backend search falls back to sample awards when automation imports fail", 
   assert.equal(response.status, 200);
   assert.equal(payload.ok, true);
   assert(payload.attempts.some((attempt) => attempt.name === "Award Automation Fallback" && attempt.outcome.includes("failed")));
-  assert(payload.sources.some((source) => source.role === "awards" && source.type === "sample"));
+  assert.equal(payload.sources.some((source) => source.role === "awards"), false);
   assert(payload.workers.some((worker) => worker.program === "united" && worker.mode === "error"));
-  assert(payload.warnings.some((warning) => warning.includes("award automation workers failed")));
-  assert(payload.itineraries.length > 0);
+  assert(payload.warnings.some((warning) => warning.includes("no usable cached award results")));
+  assert.equal(payload.itineraries.length, 0);
 });
 
 test("backend search can use inline award imports from the request body", async (t) => {
@@ -848,6 +878,7 @@ test("multi-passenger searches scale award usage and cash totals", async () => {
     cashSavings: 629.6,
     paymentEffectiveCost: 628.2,
     timePreferencePenalty: 18,
+    groundTravelCost: 0,
     effectiveCost: 646.2,
   });
   assert.deepEqual(
@@ -980,6 +1011,7 @@ test("card travel redemptions can offset cash fares when award paths are unavail
     cashSavings: 293,
     paymentEffectiveCost: 351.6,
     timePreferencePenalty: 36,
+    groundTravelCost: 0,
     effectiveCost: 387.6,
   });
   assert.deepEqual(

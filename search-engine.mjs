@@ -3,6 +3,7 @@ import {
   PARTNER_MAP,
   TIME_WINDOWS,
   expandAirports,
+  getAirportAccess,
   formatAirlineProgramName,
 } from "./search-config.mjs";
 
@@ -15,8 +16,10 @@ export function rankItineraries(searchState, segments) {
 
 export function analyzeSearch(searchState, segments) {
   const airportScope = {
-    origins: expandAirports(searchState.origin, searchState.useNearbyAirports),
-    destinations: expandAirports(searchState.destination, searchState.useNearbyAirports),
+    origins: expandAirports(searchState.origin, searchState.useNearbyAirports, searchState.nearbyAirportMaxGroundTravelMinutes),
+    destinations: expandAirports(searchState.destination, searchState.useNearbyAirports, searchState.nearbyAirportMaxGroundTravelMinutes),
+    nearbyAirportMaxGroundTravelMinutes: searchState.nearbyAirportMaxGroundTravelMinutes,
+    nearbyAirportGroundCostPerHour: searchState.nearbyAirportGroundCostPerHour,
   };
 
   const diagnostics = {
@@ -134,7 +137,8 @@ function buildOneWayItinerary(outbound, searchState, diagnostics) {
     outboundOption: bestPayment,
     returnOption: null,
   };
-  const valueBreakdown = buildValueBreakdown(payment, timePreferencePenalty);
+  const airportAccess = buildItineraryAirportAccess(outbound, null, searchState);
+  const valueBreakdown = buildValueBreakdown(payment, timePreferencePenalty, airportAccess.groundTravelCost);
   const ticketing = buildTicketingMetadata(outbound, null);
 
   const itinerary = {
@@ -146,6 +150,7 @@ function buildOneWayItinerary(outbound, searchState, diagnostics) {
     ticketing,
     totalDurationMinutes: outbound.durationMinutes,
     travelMetrics: buildItineraryTravelMetrics(outbound, null),
+    airportAccess,
     riskFlags: buildItineraryRiskFlags(outbound, null, ticketing),
     qualityPenalty: null,
     stayNights: null,
@@ -425,7 +430,8 @@ function buildItinerary(outbound, inbound, searchState, diagnostics) {
       ? preferencePenalty(inbound.departure, searchState.returnTimePreference)
       : 0;
   const timePreferencePenalty = (departurePenalty + returnPenalty) * getTimePreferencePenaltyDollars(searchState);
-  const valueBreakdown = buildValueBreakdown(bestPayment, timePreferencePenalty);
+  const airportAccess = buildItineraryAirportAccess(outbound, inbound, searchState);
+  const valueBreakdown = buildValueBreakdown(bestPayment, timePreferencePenalty, airportAccess.groundTravelCost);
   const ticketing = buildTicketingMetadata(outbound, inbound);
 
   const itinerary = {
@@ -437,6 +443,7 @@ function buildItinerary(outbound, inbound, searchState, diagnostics) {
     ticketing,
     totalDurationMinutes: outbound.durationMinutes + inbound.durationMinutes,
     travelMetrics: buildItineraryTravelMetrics(outbound, inbound),
+    airportAccess,
     riskFlags: buildItineraryRiskFlags(outbound, inbound, ticketing),
     qualityPenalty: null,
     stayNights: getStayNights(outbound.departure, inbound.departure),
@@ -709,7 +716,25 @@ function fitsBalances(usage, balances) {
   return Object.entries(usage).every(([program, amount]) => (balances[program] ?? 0) >= amount);
 }
 
-function buildValueBreakdown(payment, timePreferencePenalty) {
+function buildItineraryAirportAccess(outbound, inbound, searchState) {
+  const legs = [outbound, inbound].filter(Boolean).map((segment) => {
+    const origin = getAirportAccess(segment.origin);
+    const destination = getAirportAccess(segment.destination);
+    return {
+      direction: segment === outbound ? "outbound" : "return",
+      origin,
+      destination,
+      groundTravelMinutes: origin.groundTravelMinutes + destination.groundTravelMinutes,
+    };
+  });
+  const groundTravelMinutes = legs.reduce((sum, leg) => sum + leg.groundTravelMinutes, 0);
+  const groundTravelCost = roundCurrency(
+    (groundTravelMinutes / 60) * (searchState.nearbyAirportGroundCostPerHour ?? 20)
+  );
+  return { legs, groundTravelMinutes, groundTravelCost };
+}
+
+function buildValueBreakdown(payment, timePreferencePenalty, groundTravelCost = 0) {
   const paymentOptions = [payment.outboundOption, payment.returnOption].filter(Boolean);
   const referenceCashPrice = sumNullableCurrency(paymentOptions.map((option) => option.referenceCashPrice));
   const pointOpportunityCost = roundCurrency(
@@ -725,7 +750,8 @@ function buildValueBreakdown(payment, timePreferencePenalty) {
     cashSavings,
     paymentEffectiveCost,
     timePreferencePenalty: roundCurrency(timePreferencePenalty),
-    effectiveCost: roundCurrency(paymentEffectiveCost + timePreferencePenalty),
+    groundTravelCost: roundCurrency(groundTravelCost),
+    effectiveCost: roundCurrency(paymentEffectiveCost + timePreferencePenalty + groundTravelCost),
   };
 }
 

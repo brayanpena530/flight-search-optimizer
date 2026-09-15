@@ -43,6 +43,17 @@
 
           <div class="grid two-up">
             <label>
+              <span>Nearby-airport ground-time limit (minutes)</span>
+              <input name="nearbyAirportMaxGroundTravelMinutes" type="number" min="0" step="5" value="90" required />
+            </label>
+            <label>
+              <span>Estimated ground cost ($/hour)</span>
+              <input name="nearbyAirportGroundCostPerHour" type="number" min="0" step="1" value="20" required />
+            </label>
+          </div>
+
+          <div class="grid two-up">
+            <label>
               <span>Earliest departure</span>
               <input name="earliestDeparture" type="date" value="2026-07-10" required />
             </label>
@@ -150,8 +161,8 @@
             <label>
               <span>Data strategy</span>
               <select name="dataStrategy">
-                <option value="official-first" selected>Official APIs first</option>
-                <option value="official-then-automation">Official APIs then automation fallback</option>
+                <option value="official-first" selected>SerpApi and cached awards</option>
+                <option value="official-then-automation">SerpApi and cached awards (no sample fallback)</option>
                 <option value="sample-only">Sample data only</option>
               </select>
             </label>

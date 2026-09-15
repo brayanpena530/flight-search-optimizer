@@ -30,6 +30,8 @@ export function normalizeSearchState(input = {}) {
     origin: normalizeAirportCode(input.origin),
     destination: normalizeAirportCode(input.destination),
     useNearbyAirports: Boolean(input.useNearbyAirports),
+    nearbyAirportMaxGroundTravelMinutes: normalizeNumber(input.nearbyAirportMaxGroundTravelMinutes, 90),
+    nearbyAirportGroundCostPerHour: normalizeNumber(input.nearbyAirportGroundCostPerHour, 20),
     earliestDeparture: normalizeDate(input.earliestDeparture),
     latestDeparture: normalizeDate(input.latestDeparture),
     earliestReturn: normalizeDate(input.earliestReturn),
@@ -152,6 +154,14 @@ export function validateSearchState(searchState) {
 
   if (searchState.timePreferencePenaltyDollars < 0) {
     errors.push("Soft time preference penalty cannot be negative.");
+  }
+
+  if (searchState.nearbyAirportMaxGroundTravelMinutes < 0) {
+    errors.push("Nearby-airport maximum ground-travel minutes cannot be negative.");
+  }
+
+  if (searchState.nearbyAirportGroundCostPerHour < 0) {
+    errors.push("Nearby-airport ground-travel cost per hour cannot be negative.");
   }
 
   if (!ALLOWED_STRATEGIES.has(searchState.dataStrategy)) {

@@ -32,20 +32,32 @@ export const TRANSFER_PARTNERS = {
 
 export const PARTNER_MAP = TRANSFER_PARTNERS;
 
-export const AIRPORT_GROUPS = {
-  ORD: ["ORD", "MDW"],
-  MDW: ["ORD", "MDW"],
-  NYC: ["JFK", "LGA", "EWR"],
-  JFK: ["JFK", "LGA", "EWR"],
-  LGA: ["JFK", "LGA", "EWR"],
-  EWR: ["JFK", "LGA", "EWR"],
-  HOU: ["IAH", "HOU"],
-  IAH: ["IAH", "HOU"],
-  LAX: ["LAX", "BUR", "SNA", "ONT"],
-  BUR: ["LAX", "BUR", "SNA", "ONT"],
-  SNA: ["LAX", "BUR", "SNA", "ONT"],
-  ONT: ["LAX", "BUR", "SNA", "ONT"],
-};
+const AIRPORT_METRO_DEFINITIONS = [
+  { id: "HOU", city: "Houston", airports: ["IAH", "HOU"], primary: "IAH", groundTravelMinutes: { IAH: 0, HOU: 35 } },
+  { id: "NYC", city: "New York City", airports: ["JFK", "LGA", "EWR"], primary: "JFK", groundTravelMinutes: { JFK: 0, LGA: 35, EWR: 45 } },
+  { id: "ORD", city: "Chicago", airports: ["ORD", "MDW"], primary: "ORD", groundTravelMinutes: { ORD: 0, MDW: 35 } },
+  { id: "LAX", city: "Los Angeles", airports: ["LAX", "BUR", "SNA", "ONT"], primary: "LAX", groundTravelMinutes: { LAX: 0, BUR: 45, SNA: 60, ONT: 75 } },
+  { id: "DFW", city: "Dallas-Fort Worth", airports: ["DFW", "DAL"], primary: "DFW", groundTravelMinutes: { DFW: 0, DAL: 35 } },
+  { id: "WAS", city: "Washington, DC", airports: ["DCA", "IAD", "BWI"], primary: "DCA", groundTravelMinutes: { DCA: 0, IAD: 45, BWI: 55 } },
+  { id: "SFO", city: "San Francisco Bay Area", airports: ["SFO", "OAK", "SJC"], primary: "SFO", groundTravelMinutes: { SFO: 0, OAK: 35, SJC: 65 } },
+  { id: "MIA", city: "South Florida", airports: ["MIA", "FLL", "PBI"], primary: "MIA", groundTravelMinutes: { MIA: 0, FLL: 45, PBI: 90 } },
+  { id: "BOS", city: "Boston / New England", airports: ["BOS", "PVD", "BDL"], primary: "BOS", groundTravelMinutes: { BOS: 0, PVD: 75, BDL: 105 } },
+  { id: "SEA", city: "Seattle", airports: ["SEA", "PAE"], primary: "SEA", groundTravelMinutes: { SEA: 0, PAE: 55 } },
+];
+
+export const AIRPORT_METROS = Object.fromEntries(
+  AIRPORT_METRO_DEFINITIONS.map((metro) => [metro.id, metro])
+);
+
+export const AIRPORT_GROUPS = Object.fromEntries(
+  AIRPORT_METRO_DEFINITIONS.flatMap((metro) => metro.airports.map((airport) => [airport, metro.airports]))
+    .concat(AIRPORT_METRO_DEFINITIONS.map((metro) => [metro.id, metro.airports]))
+);
+
+export function getAirportMetro(input) {
+  const code = String(input ?? "").toUpperCase();
+  return AIRPORT_METRO_DEFINITIONS.find((metro) => metro.id === code || metro.airports.includes(code)) ?? null;
+}
 
 export const TIME_WINDOWS = {
   morning: [5, 11],
@@ -53,10 +65,27 @@ export const TIME_WINDOWS = {
   evening: [18, 23],
 };
 
-export function expandAirports(input, useNearbyAirports) {
+export function getAirportAccess(input) {
+  const code = String(input ?? "").toUpperCase();
+  const metro = getAirportMetro(code);
+  if (!metro) return { airport: code, metroId: null, city: null, isPrimary: true, groundTravelMinutes: 0 };
+  return {
+    airport: code,
+    metroId: metro.id,
+    city: metro.city,
+    isPrimary: code === metro.primary,
+    groundTravelMinutes: metro.groundTravelMinutes?.[code] ?? 0,
+  };
+}
+
+export function expandAirports(input, useNearbyAirports, maxGroundTravelMinutes = Infinity) {
   if (!useNearbyAirports) {
     return [input];
   }
 
-  return AIRPORT_GROUPS[input] ?? [input];
+  const metro = getAirportMetro(input);
+  if (!metro) return [input];
+  return metro.airports.filter((airport) =>
+    (metro.groundTravelMinutes?.[airport] ?? 0) <= maxGroundTravelMinutes
+  );
 }

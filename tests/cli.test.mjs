@@ -162,15 +162,12 @@ test("CLI health uses the full server provider health contract", async () => {
     output.providers.map((provider) => provider.id),
     [
       "serpapi-google-flights",
-      "amadeus-flight-offers",
-      "duffel",
       "seats-aero",
     ]
   );
-  assert.equal(output.providers.find((provider) => provider.id === "duffel")?.status, "not-implemented");
 });
 
-test("official-first CLI searches use the award provider lane before sample fallback", async () => {
+test("official-first CLI searches report missing live cash and award results", async () => {
   const originalSeatsKey = process.env.SEATS_AERO_API_KEY;
   process.env.SEATS_AERO_API_KEY = "";
   const captureResult = capture(JSON.stringify({
@@ -182,7 +179,9 @@ test("official-first CLI searches use the award provider lane before sample fall
   const output = captureResult.read();
   process.env.SEATS_AERO_API_KEY = originalSeatsKey;
 
-  assert.equal(exitCode, 0);
-  assert.ok(output.attempts.some((attempt) => attempt.name === "Award Automation Fallback"));
+  assert.equal(exitCode, 1);
+  assert.ok(output.attempts.some((attempt) => attempt.name === "SerpApi Google Flights"));
+  assert.ok(output.warnings.some((warning) => warning.includes("no usable cash-flight results")));
+  assert.ok(output.warnings.some((warning) => warning.includes("no usable cached award results")));
   assert.ok(output.workers.some((worker) => worker.program === "united"));
 });

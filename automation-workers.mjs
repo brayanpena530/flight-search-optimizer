@@ -159,7 +159,10 @@ function createImportCapableWorker(name, program) {
         };
       }
 
-      return sampleWorker.collect({ segments, searchState, matchesFallbackWindow });
+      return {
+        mode: "unavailable",
+        segments: [],
+      };
     },
   };
 }
