@@ -1,0 +1,35 @@
+{
+  "segments": [
+    {
+      "origin": "IAH",
+      "destination": "EWR",
+      "airline": "United",
+      "cabin": "economy",
+      "departure": "2026-08-05T07:35:00",
+      "arrival": "2026-08-05T12:12:00",
+      "stops": 0,
+      "durationMinutes": 217,
+      "cashPrice": 176,
+      "miles": 12500,
+      "taxes": 5.6
+    },
+    {
+      "origin": "JFK",
+      "destination": "IAH",
+      "airline": "United",
+      "cabin": "economy",
+      "departure": "2026-08-09T09:15:00",
+      "arrival": "2026-08-09T12:02:00",
+      "stops": 0,
+      "durationMinutes": 227,
+      "cashPrice": 184,
+      "awardOptions": [
+        {
+          "program": "united",
+          "miles": 12500,
+          "taxes": 5.6
+        }
+      ]
+    }
+  ]
+}

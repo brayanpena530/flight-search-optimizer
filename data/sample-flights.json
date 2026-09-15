@@ -1,0 +1,226 @@
+[
+  {
+    "origin": "ORD",
+    "destination": "LAX",
+    "airline": "United",
+    "cabin": "economy",
+    "departure": "2026-07-10T13:10:00",
+    "arrival": "2026-07-10T15:55:00",
+    "stops": 0,
+    "durationMinutes": 245,
+    "cashPrice": 154,
+    "awardOptions": [
+      { "program": "united", "miles": 12000, "taxes": 5.6 }
+    ]
+  },
+  {
+    "origin": "ORD",
+    "destination": "LAX",
+    "airline": "Southwest",
+    "cabin": "economy",
+    "departure": "2026-07-11T08:15:00",
+    "arrival": "2026-07-11T10:50:00",
+    "stops": 0,
+    "durationMinutes": 215,
+    "cashPrice": 138,
+    "awardOptions": [
+      { "program": "southwest", "miles": 10400, "taxes": 5.6 }
+    ]
+  },
+  {
+    "origin": "MDW",
+    "destination": "BUR",
+    "airline": "Southwest",
+    "cabin": "economy",
+    "departure": "2026-07-12T14:35:00",
+    "arrival": "2026-07-12T16:50:00",
+    "stops": 0,
+    "durationMinutes": 255,
+    "cashPrice": 146,
+    "awardOptions": [
+      { "program": "southwest", "miles": 11100, "taxes": 5.6 }
+    ]
+  },
+  {
+    "origin": "ORD",
+    "destination": "SNA",
+    "airline": "Frontier",
+    "cabin": "economy",
+    "departure": "2026-07-13T19:20:00",
+    "arrival": "2026-07-13T22:10:00",
+    "stops": 1,
+    "durationMinutes": 350,
+    "cashPrice": 91,
+    "awardOptions": [
+      { "program": "frontier", "miles": 10000, "taxes": 15.1 }
+    ]
+  },
+  {
+    "origin": "LAX",
+    "destination": "ORD",
+    "airline": "United",
+    "cabin": "economy",
+    "departure": "2026-07-14T09:20:00",
+    "arrival": "2026-07-14T15:15:00",
+    "stops": 0,
+    "durationMinutes": 235,
+    "cashPrice": 164,
+    "awardOptions": [
+      { "program": "united", "miles": 12000, "taxes": 5.6 }
+    ]
+  },
+  {
+    "origin": "BUR",
+    "destination": "MDW",
+    "airline": "Southwest",
+    "cabin": "economy",
+    "departure": "2026-07-15T08:40:00",
+    "arrival": "2026-07-15T14:50:00",
+    "stops": 0,
+    "durationMinutes": 250,
+    "cashPrice": 149,
+    "awardOptions": [
+      { "program": "southwest", "miles": 11000, "taxes": 5.6 }
+    ]
+  },
+  {
+    "origin": "LAX",
+    "destination": "ORD",
+    "airline": "Delta",
+    "cabin": "economy",
+    "departure": "2026-07-16T11:35:00",
+    "arrival": "2026-07-16T17:45:00",
+    "stops": 1,
+    "durationMinutes": 305,
+    "cashPrice": 133,
+    "awardOptions": [
+      { "program": "delta", "miles": 11200, "taxes": 5.6 }
+    ]
+  },
+  {
+    "origin": "ONT",
+    "destination": "MDW",
+    "airline": "Frontier",
+    "cabin": "economy",
+    "departure": "2026-07-17T06:20:00",
+    "arrival": "2026-07-17T12:45:00",
+    "stops": 1,
+    "durationMinutes": 325,
+    "cashPrice": 88,
+    "awardOptions": [
+      { "program": "frontier", "miles": 9800, "taxes": 15.1 }
+    ]
+  },
+  {
+    "origin": "JFK",
+    "destination": "LAX",
+    "airline": "JetBlue",
+    "cabin": "economy",
+    "departure": "2026-09-03T12:05:00",
+    "arrival": "2026-09-03T15:34:00",
+    "stops": 0,
+    "durationMinutes": 389,
+    "cashPrice": 189,
+    "awardOptions": [
+      { "program": "jetblue", "miles": 14500, "taxes": 5.6 }
+    ]
+  },
+  {
+    "origin": "LGA",
+    "destination": "LAX",
+    "airline": "Delta",
+    "cabin": "economy",
+    "departure": "2026-09-04T18:10:00",
+    "arrival": "2026-09-04T21:58:00",
+    "stops": 0,
+    "durationMinutes": 408,
+    "cashPrice": 172,
+    "awardOptions": [
+      { "program": "delta", "miles": 13600, "taxes": 5.6 }
+    ]
+  },
+  {
+    "origin": "LAX",
+    "destination": "JFK",
+    "airline": "JetBlue",
+    "cabin": "economy",
+    "departure": "2026-09-09T08:10:00",
+    "arrival": "2026-09-09T16:40:00",
+    "stops": 0,
+    "durationMinutes": 390,
+    "cashPrice": 205,
+    "awardOptions": [
+      { "program": "jetblue", "miles": 15400, "taxes": 5.6 }
+    ]
+  },
+  {
+    "origin": "LAX",
+    "destination": "EWR",
+    "airline": "United",
+    "cabin": "economy",
+    "departure": "2026-09-10T07:15:00",
+    "arrival": "2026-09-10T15:55:00",
+    "stops": 0,
+    "durationMinutes": 400,
+    "cashPrice": 192,
+    "awardOptions": [
+      { "program": "united", "miles": 15000, "taxes": 5.6 }
+    ]
+  },
+  {
+    "origin": "IAH",
+    "destination": "EWR",
+    "airline": "United",
+    "cabin": "economy",
+    "departure": "2026-08-05T07:35:00",
+    "arrival": "2026-08-05T12:12:00",
+    "stops": 0,
+    "durationMinutes": 217,
+    "cashPrice": 176,
+    "awardOptions": [
+      { "program": "united", "miles": 12500, "taxes": 5.6 }
+    ]
+  },
+  {
+    "origin": "HOU",
+    "destination": "LGA",
+    "airline": "Southwest",
+    "cabin": "economy",
+    "departure": "2026-08-06T13:20:00",
+    "arrival": "2026-08-06T18:05:00",
+    "stops": 1,
+    "durationMinutes": 285,
+    "cashPrice": 142,
+    "awardOptions": [
+      { "program": "southwest", "miles": 10800, "taxes": 5.6 }
+    ]
+  },
+  {
+    "origin": "JFK",
+    "destination": "IAH",
+    "airline": "United",
+    "cabin": "economy",
+    "departure": "2026-08-09T09:15:00",
+    "arrival": "2026-08-09T12:02:00",
+    "stops": 0,
+    "durationMinutes": 227,
+    "cashPrice": 184,
+    "awardOptions": [
+      { "program": "united", "miles": 12500, "taxes": 5.6 }
+    ]
+  },
+  {
+    "origin": "EWR",
+    "destination": "HOU",
+    "airline": "Southwest",
+    "cabin": "economy",
+    "departure": "2026-08-10T17:45:00",
+    "arrival": "2026-08-10T22:10:00",
+    "stops": 1,
+    "durationMinutes": 265,
+    "cashPrice": 151,
+    "awardOptions": [
+      { "program": "southwest", "miles": 11600, "taxes": 5.6 }
+    ]
+  }
+]

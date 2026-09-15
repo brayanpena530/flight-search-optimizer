@@ -1,0 +1,35 @@
+{
+  "segments": [
+    {
+      "origin": "HOU",
+      "destination": "LGA",
+      "airline": "Southwest",
+      "cabin": "economy",
+      "departure": "2026-08-06T13:20:00",
+      "arrival": "2026-08-06T18:05:00",
+      "stops": 1,
+      "durationMinutes": 285,
+      "cashPrice": 142,
+      "miles": 10800,
+      "taxes": 5.6
+    },
+    {
+      "origin": "EWR",
+      "destination": "HOU",
+      "airline": "Southwest",
+      "cabin": "economy",
+      "departure": "2026-08-10T17:45:00",
+      "arrival": "2026-08-10T22:10:00",
+      "stops": 1,
+      "durationMinutes": 265,
+      "cashPrice": 151,
+      "awardOptions": [
+        {
+          "program": "southwest",
+          "miles": 11600,
+          "taxes": 5.6
+        }
+      ]
+    }
+  ]
+}

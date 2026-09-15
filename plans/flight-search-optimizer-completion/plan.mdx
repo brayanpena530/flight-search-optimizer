@@ -1,0 +1,209 @@
+---
+title: "Flight Search Optimizer Completion Plan"
+kind: "plan"
+localOnly: true
+---
+
+<RichText id="overview">
+
+### Objective
+
+Complete the local flight optimizer so a traveler can enter Amex Membership Rewards, Chase Ultimate Rewards, airline balances, flexible trip dates, stay length, and time-of-day preferences, then compare the most cost-effective flight options across cash, direct airline miles, and bank-point transfers.
+
+Done means the current sample-backed app remains usable without credentials, live cash search can use credentialed official providers where implemented, award-provider fallback behavior is explicit, and the UI explains why each ranked itinerary won or why no itinerary qualified.
+
+</RichText>
+
+<WireframeBlock id="target-planner-wireframe">
+  <Screen surface="browser" caption="Target planner surface: dense inputs stay on the left, results and diagnostics stay scan-friendly on the right.">
+    <div style="display:flex;flex-direction:column;gap:12px;padding:16px;height:100%;box-sizing:border-box">
+      <div style="display:flex;align-items:center;width:100%;gap:12px">
+        <div>
+          <h1>Flight Search Optimizer</h1>
+          <p class="wf-muted">ORD to LAX, flexible July window, award programs selected.</p>
+        </div>
+        <div style="flex:1"></div>
+        <span class="wf-pill accent">Official APIs first</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1.35fr;gap:14px;min-height:0;flex:1">
+        <div class="wf-card" style="display:flex;flex-direction:column;gap:10px;min-width:0">
+          <strong>Trip inputs</strong>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <label>Origin<input value="ORD" /></label>
+            <label>Destination<input value="LAX" /></label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <label>Depart from<input value="2026-07-10" /></label>
+            <label>Depart until<input value="2026-07-14" /></label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <label>Return from<input value="2026-07-13" /></label>
+            <label>Return until<input value="2026-07-19" /></label>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <span class="wf-chip accent">Amex 85k</span>
+            <span class="wf-chip">Chase 65k</span>
+            <span class="wf-chip">United 22k</span>
+            <span class="wf-chip">Southwest 12k</span>
+          </div>
+          <button class="primary">Find best options</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+          <div class="wf-card" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+            <div><strong>$11</strong><br /><small>Lowest cash outlay</small></div>
+            <div><strong>4 nights</strong><br /><small>Best stay length</small></div>
+            <div><strong>24k</strong><br /><small>Chase transfer</small></div>
+            <div><strong>1.32 cpp</strong><br /><small>Average value</small></div>
+          </div>
+          <div class="wf-card" style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <strong>#1 MDW to BUR, BUR to MDW</strong>
+              <div style="flex:1"></div>
+              <span class="wf-pill accent">Cash outlay $11</span>
+            </div>
+            <p class="wf-muted">Outbound transfer Chase to Southwest + return transfer Chase to Southwest.</p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <span class="wf-chip">Same-airline pairing</span>
+              <span class="wf-chip">Jul 12 out</span>
+              <span class="wf-chip">Jul 15 return</span>
+              <span class="wf-chip">3 nights</span>
+            </div>
+          </div>
+          <div class="wf-card" style="display:flex;flex-direction:column;gap:6px">
+            <strong>Search diagnostics</strong>
+            <p class="wf-muted">Segments considered: 12 total, 4 outbound, 4 return. Award rejects show cpp, balances, and transfer limits separately.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Screen>
+</WireframeBlock>
+
+<RichText id="current-state">
+
+### Current State
+
+The repository already has a single-page planner in `index.html`, browser wiring in `app.js`, shared normalization in `search-state.mjs`, ranking and diagnostics in `search-engine.mjs`, provider orchestration in `providers.js` and `server.mjs`, configurable airport/partner rules in `search-config.mjs`, sample award inventory in `data/sample-flights.json`, and a sample-backed automation worker registry in `automation-workers.mjs`.
+
+The most important missing work is not another form field. The next useful slice is making provider behavior and optimization evidence stronger: fewer duplicated provider paths, clearer result math, testable search contracts, and a concrete path for replacing sample-backed award workers with live collectors.
+
+</RichText>
+
+<Diagram
+  id="target-flow"
+  data={{
+    html: '<div class="diagram-panel" data-rough><div class="diagram-card"><strong>Planner UI</strong><br/><span class="diagram-muted">index.html + app.js</span></div><div class="diagram-card"><strong>Validation contract</strong><br/><span class="diagram-muted">search-state.mjs</span></div><div class="diagram-card"><strong>Provider resolver</strong><br/><span class="diagram-muted">server.mjs</span></div><div class="diagram-card"><strong>Ranking engine</strong><br/><span class="diagram-muted">search-engine.mjs</span></div><div class="diagram-card"><strong>Explained results</strong><br/><span class="diagram-muted">itineraries, insights, diagnostics</span></div></div>',
+    css: ".diagram-panel { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; align-items: stretch; } .diagram-card { border: 1.4px solid var(--wf-line); border-radius: var(--wf-radius); padding: 12px; background: var(--wf-card); } .diagram-muted { color: var(--wf-muted); }",
+    caption: "Target request flow keeps validation, provider resolution, ranking, and UI explanation as separate contracts."
+  }}
+/>
+
+<FileTree
+  id="file-plan"
+  title="Primary files"
+  entries={[
+    { path: "server.mjs", change: "modified", note: "Keep the canonical provider resolver, normalize live provider fares into the ranking contract, and expose consistent warnings, diagnostics, and source metadata." },
+    { path: "providers.js", change: "modified", note: "Either delegate to the backend search route or stay aligned with server provider behavior to avoid split-brain fallback logic." },
+    { path: "search-engine.mjs", change: "modified", note: "Improve optimization evidence: payment labels, transfer usage, cash versus effective-cost ranking, and diagnostics." },
+    { path: "search-state.mjs", change: "modified", note: "Extend only when new user inputs or provider contract fields are needed." },
+    { path: "app.js", change: "modified", note: "Render provider status, recommendations, result math, and empty-state guidance without hiding sample fallback behavior." },
+    { path: "automation-workers.mjs", change: "modified", note: "Keep per-program award collection behind one contract, using inline request imports, env-var imports, or real collectors as they become available." },
+    { path: "data/sample-flights.json", change: "modified", note: "Keep as deterministic fixture coverage for flexible-date and points optimization behavior." }
+  ]}
+/>
+
+<RichText id="implementation-steps">
+
+### Implementation Path
+
+1. Unify the client search path around `/api/providers/search` so the server is the source of truth for provider order, warnings, diagnostics, and source blending. This reduces duplicated merge and fallback logic between `providers.js` and `server.mjs`. Status: implemented for the browser helper by keeping provider cards client-side and delegating search resolution to the backend contract.
+
+2. Tighten optimization evidence in `search-engine.mjs`: preserve per-leg payment choices, show bank points consumed versus airline miles booked, show the effective-cost formula behind each ranked result, and keep balance rejection counts accurate when both legs compete for the same currency.
+
+Status: adult traveler count is now part of the search state and result output, and ranking totals scale cash fares, award taxes, direct miles, transfer points, and balance checks to the full party.
+
+Status: configurable card-travel redemption rates are now part of the search state, so Amex and Chase balances can offset cash fares directly in addition to transfer-backed awards. The UI exposes these rates as assumptions because public redemption values can change and vary by product or booking path.
+
+Status: payment-method selection now respects `rankingFocus`. Cash-first searches still minimize out-of-pocket dollars before effective cost, while effective-cost searches choose the cheapest economic payment method inside each itinerary before sorting itinerary results. Award program selection is also enforced inside `search-engine.mjs`, so unchecked airline programs cannot qualify through direct balances or bank transfers.
+
+Status: each itinerary now includes a structured `valueBreakdown` with cash fare baseline, cash saved, point opportunity cost, payment effective cost, time preference penalty, and final effective cost. The browser renders that formula under each result card so the top option's economics are inspectable.
+
+3. Add deterministic contract tests for normalization, ranking, transfer ratios, time preference modes, empty-result recommendations, and provider fallback warnings. Use the sample inventory as the fixture until live provider credentials are available. Status: focused Node tests now cover validation, Houston/New York airport expansion, sample ranking, the backend search contract, United award import, inline request award import, Amadeus multi-adult fare normalization, and multi-passenger award scaling.
+
+4. Promote provider configuration out of scattered constants where practical: supported partners, transfer ratios, airport groups, provider readiness, and award-program selection should stay visible and easy to extend.
+
+5. Replace sample-backed award automation incrementally, starting with normalized import seams behind the existing `AUTOMATION_WORKERS` contract. Each worker should return normalized segment-shaped data and explicit worker metadata, not UI-specific objects. Status: all selected airline workers can now load normalized award segments from request-scoped inline imports or per-program import paths such as `UNITED_AWARD_IMPORT_PATH` and `SOUTHWEST_AWARD_IMPORT_PATH`; browser automation can replace those import sources later without changing the ranking contract. Import failures are isolated per worker so one broken file does not block other configured programs.
+
+6. Add live-provider guardrails: timeout handling, bounded flexible-date fanout, clear API quota warnings, and a response shape that can mix live cash fares with sample or automation-backed award inventory without implying everything is live. Status: local `.env` loading and `.env.example` are implemented so credentials can stay out of source control while preserving process environment overrides. Award automation now fails open to the next award source when workers fail or produce no candidates, while preserving worker error details and warnings in the backend search response.
+
+Status: Amadeus cash offers now normalize provider `grandTotal`/`total` values back to a per-adult segment fare before ranking. The ranking engine still owns party-size scaling, so two-adult live cash searches are not double-counted.
+
+Status: direct airline program support now includes American and Alaska in the same normalized balance, selection, inline import, env-var import, worker, and result-label flow as the earlier airline programs. These are direct-mile paths only until a real transfer partner rule is intentionally added to `search-config.mjs`.
+
+Status: airline program metadata is now centralized in `search-config.mjs` as `AIRLINE_PROGRAMS` and `AWARD_PROGRAM_IDS`. Validation, default award scope, airline balance normalization, automation worker registration, browser form reads, display labels, award-program checkboxes, and airline balance inputs derive from that shared list so the next direct-mile program can be added without duplicating the same id/name mapping across the app.
+
+Status: transfer partner metadata is now centralized in `search-config.mjs` as `TRANSFER_PARTNERS`, with `PARTNER_MAP` derived from it for ranking compatibility. Search-state normalization and the browser transfer-ratio controls derive from that shared map, and the static duplicate United balance input was removed so airline balances now live in one generated section.
+
+Status: soft time-of-day preference cost is now explicit. The planner exposes `timePreferencePenaltyDollars`, validation rejects negative values, and `search-engine.mjs` uses that configured dollar amount per missed soft-preference leg instead of a hidden fixed `$18` assumption.
+
+Status: flexible-date insight cards now carry the same decision evidence as ranked results. `buildSearchInsights` includes the winning payment label, points or miles used, cash savings, and time preference penalty for best departure dates, return dates, and stay lengths, and the browser renders those tradeoffs directly in the insight lines. Each ranked itinerary also exposes `balanceImpact`, a normalized before/used/remaining view of the balances touched by the selected payment method, and the browser renders that under the payment breakdown.
+
+</RichText>
+
+<Callout id="settled-user-decisions" tone="decision">
+
+Settled implementation defaults: implement United award collection first, keep live provider credentials in local environment variables for this personal local app, and expand sample plus smoke-test route coverage with Houston to New York.
+
+</Callout>
+
+<Endpoint id="search-endpoint" method="POST" path="/api/providers/search" summary="Resolve providers and rank itineraries" auth="Local server">
+
+Accepts the normalized planner state and returns ranked itineraries, provider attempts, source summaries, diagnostics, insights, recommendations, and development fallback warnings.
+
+</Endpoint>
+
+<Callout id="decision-source-of-truth" tone="decision">
+
+Make `server.mjs` the canonical search orchestrator. The browser should submit the planner state once and render the returned contract. Keeping separate client-side provider orchestration risks mismatched warnings and result counts as live providers are added.
+
+</Callout>
+
+<RichText id="fixture-coverage">
+
+### Route Coverage
+
+Add Houston to New York as the next deterministic route family. The airport scope should cover Houston as `IAH/HOU` and New York as `JFK/LGA/EWR`, with sample outbound and return segments that exercise cash, United award availability, and at least one transfer-backed Chase redemption path. Status: implemented in `search-config.mjs` and `data/sample-flights.json`.
+
+</RichText>
+
+<RichText id="united-import-path">
+
+### United Award Import
+
+Use normalized award imports for the first real-data award lane. The local UI can send an `awardImports` request object keyed by program, and the backend can also read per-program paths: `UNITED_AWARD_IMPORT_PATH`, `DELTA_AWARD_IMPORT_PATH`, `JETBLUE_AWARD_IMPORT_PATH`, `SOUTHWEST_AWARD_IMPORT_PATH`, `FRONTIER_AWARD_IMPORT_PATH`, `AMERICAN_AWARD_IMPORT_PATH`, and `ALASKA_AWARD_IMPORT_PATH`. Each import payload can be either an array or an object with a `segments` array. Each segment is normalized to the same shape as sample inventory: `origin`, `destination`, `airline`, `cabin`, `departure`, `arrival`, `stops`, `durationMinutes`, a positive `cashPrice` or `referenceCashPrice`, and either `miles`/`taxes` or `awardOptions`. This keeps the rest of the app provider-agnostic while live browser workers or export workflows are still being chosen. Imports now reject records without usable reference fares or positive award data so bad records cannot produce fake free-cash rankings or invalid cpp calculations. Imported award fares are treated as reference fares for value math only; they do not create cash or card-travel payment options unless the same segment is also supplied by a cash-capable source.
+
+</RichText>
+
+<RichText id="card-travel-redemption">
+
+### Card Travel Redemption
+
+Use configurable `redemptionRates.amexTravel` and `redemptionRates.chaseTravel` values for direct bank-point cash-fare offsets. The ranking engine treats those paths as payment options for each leg: points can cover all or part of the cash fare, remaining dollars stay as `cashOutlay`, and point usage is still included in effective cost using the user's personal point valuations. This complements transfers instead of replacing them.
+
+</RichText>
+
+<RichText id="verification">
+
+### Verification
+
+Run syntax checks for all modules, add or run focused Node tests for search-state and search-engine behavior, and smoke the local app in a browser at a fixed port. The browser smoke should submit the default ORD-LAX search, confirm ranked results render, confirm diagnostics include airport scope and rejection counts, and confirm non-sample data strategies expose fallback warnings when credentials are absent. Current focused tests also cover effective-cost payment selection, award-program scoping, Amadeus multi-adult fare normalization through a fake local provider, and inline request award imports through the backend search route.
+
+</RichText>
+
+<RichText id="questions-heading">
+
+### Open Questions
+
+The main implementation direction is now settled. Future questions should focus on the exact live award collection method per airline, the next route/airport coverage expansion, and which real transfer-partner rules should be configured after verifying current card-program availability.
+
+</RichText>

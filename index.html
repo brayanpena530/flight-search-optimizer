@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flight Search Optimizer</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="hero">
+        <p class="eyebrow">Flight Search Optimizer</p>
+        <h1>Rank live-style trip pairings by cash outlay and hard redemption rules.</h1>
+        <p class="hero-copy">
+          This version models transfer and card-travel Amex and Chase balances, nearby-airport
+          expansion, locally saved preferences, and hard or soft time-of-day rules.
+        </p>
+      </section>
+
+      <section class="workspace">
+        <form id="planner-form" class="planner-card">
+          <div class="card-header">
+            <h2>Trip Inputs</h2>
+            <p>Flexible departure and return windows plus stay-length constraints.</p>
+          </div>
+          <div id="validation-errors"></div>
+
+          <div class="grid two-up">
+            <label>
+              <span>Origin</span>
+              <input name="origin" type="text" value="ORD" maxlength="3" required />
+            </label>
+            <label>
+              <span>Destination</span>
+              <input name="destination" type="text" value="LAX" maxlength="3" required />
+            </label>
+          </div>
+
+          <label class="checkbox-row">
+            <input name="useNearbyAirports" type="checkbox" checked />
+            <span>Include nearby airports when a metro group is known</span>
+          </label>
+
+          <div class="grid two-up">
+            <label>
+              <span>Earliest departure</span>
+              <input name="earliestDeparture" type="date" value="2026-07-10" required />
+            </label>
+            <label>
+              <span>Latest departure</span>
+              <input name="latestDeparture" type="date" value="2026-07-14" required />
+            </label>
+          </div>
+
+          <div class="grid two-up">
+            <label>
+              <span>Earliest return</span>
+              <input name="earliestReturn" type="date" value="2026-07-13" required />
+            </label>
+            <label>
+              <span>Latest return</span>
+              <input name="latestReturn" type="date" value="2026-07-19" required />
+            </label>
+          </div>
+
+          <div class="grid three-up">
+            <label>
+              <span>Adult travelers</span>
+              <input name="adultTravelers" type="number" min="1" max="9" value="1" required />
+            </label>
+            <label>
+              <span>Minimum stay nights</span>
+              <input name="minStayNights" type="number" min="1" max="21" value="3" required />
+            </label>
+            <label>
+              <span>Maximum stay nights</span>
+              <input name="maxStayNights" type="number" min="1" max="21" value="6" required />
+            </label>
+          </div>
+
+          <div class="grid two-up">
+            <label>
+              <span>Preferred cabin</span>
+              <select name="cabinPreference">
+                <option value="any">Any cabin</option>
+                <option value="economy" selected>Economy</option>
+                <option value="premium-economy">Premium economy</option>
+                <option value="business">Business</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="grid three-up">
+            <label>
+              <span>Preferred outbound time</span>
+              <select name="departureTimePreference">
+                <option value="any">Any time</option>
+                <option value="morning">Morning</option>
+                <option value="afternoon" selected>Afternoon</option>
+                <option value="evening">Evening</option>
+              </select>
+            </label>
+            <label>
+              <span>Preferred return time</span>
+              <select name="returnTimePreference">
+                <option value="any">Any time</option>
+                <option value="morning" selected>Morning</option>
+                <option value="afternoon">Afternoon</option>
+                <option value="evening">Evening</option>
+              </select>
+            </label>
+            <label>
+              <span>Time preference mode</span>
+              <select name="timePreferenceMode">
+                <option value="soft" selected>Soft preference</option>
+                <option value="hard">Hard filter</option>
+              </select>
+            </label>
+            <label>
+              <span>Soft time penalty ($/leg)</span>
+              <input name="timePreferencePenaltyDollars" type="number" min="0" step="1" value="18" required />
+            </label>
+          </div>
+
+          <div class="grid two-up">
+            <label>
+              <span>Max stops per leg</span>
+              <select name="maxStops">
+                <option value="0">Nonstop only</option>
+                <option value="1" selected>Up to 1 stop</option>
+                <option value="2">Up to 2 stops</option>
+              </select>
+            </label>
+            <label>
+              <span>Ranking focus</span>
+              <select name="rankingFocus">
+                <option value="cash-first" selected>Lowest cash out of pocket</option>
+                <option value="effective-cost">Lowest effective cost</option>
+                <option value="fastest">Shortest total flight time</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="card-header balances">
+            <h2>Data Pipeline</h2>
+            <p>Official APIs are preferred first, with sample data keeping the app usable now.</p>
+          </div>
+
+          <div class="grid two-up">
+            <label>
+              <span>Data strategy</span>
+              <select name="dataStrategy">
+                <option value="official-first" selected>Official APIs first</option>
+                <option value="official-then-automation">Official APIs then automation fallback</option>
+                <option value="sample-only">Sample data only</option>
+              </select>
+            </label>
+            <label>
+              <span>Award data mode</span>
+              <select name="awardDataMode">
+                <option value="cash-and-awards" selected>Cash plus awards</option>
+                <option value="cash-only">Cash only</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="connection-row">
+            <button type="button" id="check-connection" class="secondary-action">
+              Check live data connection
+            </button>
+            <div id="connection-status" class="connection-status"></div>
+          </div>
+
+          <div class="card-header balances">
+            <h2>Award Search Scope</h2>
+            <p>Choose which airline programs the automation fallback is allowed to search.</p>
+          </div>
+
+          <div id="award-program-controls" class="grid four-up"></div>
+
+          <div class="grid two-up">
+            <label>
+              <span>Automation mode</span>
+              <input value="Program-targeted fallback worker contract" disabled />
+            </label>
+          </div>
+
+          <label class="textarea-field">
+            <span>Inline award import JSON</span>
+            <textarea
+              name="awardImportJson"
+              rows="7"
+              placeholder='{"united":{"segments":[{"origin":"IAH","destination":"JFK","departure":"2026-08-05T07:10:00","arrival":"2026-08-05T11:25:00","durationMinutes":195,"referenceCashPrice":326,"miles":12500,"taxes":5.6}]}}'
+            ></textarea>
+          </label>
+
+          <div class="card-header balances">
+            <h2>Balances and Valuations</h2>
+            <p>Cards can be modeled as airline-transfer currencies or direct travel-redemption currencies.</p>
+          </div>
+
+          <div class="grid two-up">
+            <label>
+              <span>Amex points</span>
+              <input name="amexPoints" type="number" min="0" step="1000" value="85000" required />
+            </label>
+            <label>
+              <span>Chase points</span>
+              <input name="chasePoints" type="number" min="0" step="1000" value="65000" required />
+            </label>
+          </div>
+
+          <div id="airline-balance-controls" class="grid four-up"></div>
+
+          <div class="grid three-up">
+            <label>
+              <span>Amex value (cents)</span>
+              <input name="amexCentsPerPoint" type="number" min="0.1" step="0.05" value="1.6" required />
+            </label>
+            <label>
+              <span>Chase value (cents)</span>
+              <input name="chaseCentsPerPoint" type="number" min="0.1" step="0.05" value="1.5" required />
+            </label>
+            <label>
+              <span>Airline miles value (cents)</span>
+              <input name="airlineCentsPerMile" type="number" min="0.1" step="0.05" value="1.3" required />
+            </label>
+          </div>
+
+          <div class="card-header balances">
+            <h2>Card Travel Redemption</h2>
+            <p>Optional cash-fare offset paths using bank points directly for travel bookings.</p>
+          </div>
+
+          <div class="grid three-up">
+            <label>
+              <span>Amex travel redemption cpp</span>
+              <input name="amexTravelRedemptionCpp" type="number" min="0" step="0.05" value="1.00" required />
+            </label>
+            <label>
+              <span>Chase travel redemption cpp</span>
+              <input name="chaseTravelRedemptionCpp" type="number" min="0" step="0.05" value="1.25" required />
+            </label>
+            <label>
+              <span>Cash offset mode</span>
+              <input value="Use bank points when they reduce out-of-pocket cost" disabled />
+            </label>
+          </div>
+
+          <div class="card-header balances">
+            <h2>Transfer Ratios</h2>
+            <p>Enter airline miles received per 1 bank point transferred.</p>
+          </div>
+
+          <div id="transfer-ratio-controls" class="grid three-up"></div>
+
+          <div class="card-header balances">
+            <h2>Hard Redemption Rules</h2>
+            <p>Minimum value required before a redemption path is considered.</p>
+          </div>
+
+          <div class="grid three-up">
+            <label>
+              <span>Amex minimum cpp</span>
+              <input name="amexMinCpp" type="number" min="0.1" step="0.05" value="1.5" required />
+            </label>
+            <label>
+              <span>Chase minimum cpp</span>
+              <input name="chaseMinCpp" type="number" min="0.1" step="0.05" value="1.25" required />
+            </label>
+            <label>
+              <span>Airline balance minimum cpp</span>
+              <input name="airlineMinCpp" type="number" min="0.1" step="0.05" value="1.1" required />
+            </label>
+          </div>
+
+          <button type="submit" class="primary-action">Find best options</button>
+        </form>
+
+        <section class="results-card">
+          <div class="card-header">
+            <h2>Ranked Options</h2>
+            <p id="results-summary">Submit the planner to compare candidate itineraries.</p>
+          </div>
+          <div id="provider-status"></div>
+          <div id="search-diagnostics"></div>
+          <div id="insights" class="insights-grid"></div>
+          <div id="results" class="results-list"></div>
+        </section>
+      </section>
+
+      <section class="notes-card">
+        <div class="card-header">
+          <h2>Implementation Notes</h2>
+          <p>This prototype now aligns with your latest product choices.</p>
+        </div>
+        <ul class="notes-list">
+          <li>Results are sorted by lowest cash out of pocket first, then effective cost, then total flight time.</li>
+          <li>Transferable currencies can be compared as airline transfers or direct travel redemptions.</li>
+          <li>Nearby-airport expansion currently uses curated metro groups in code.</li>
+          <li>Provider fallback is explicit: official APIs first, automation optional, sample data last.</li>
+        </ul>
+        <div id="provider-cards" class="provider-grid"></div>
+      </section>
+    </main>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

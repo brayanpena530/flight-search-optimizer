@@ -1,0 +1,481 @@
+---
+title: "Flight Optimizer Houston/Backend Recap"
+kind: "recap"
+localOnly: true
+---
+
+<WireframeBlock id="recap-ui-wireframe">
+  <Screen surface="browser" caption="After this change, the browser submits searches to the backend search contract while still showing provider cards and fallback warnings.">
+    <div style="display:flex;flex-direction:column;gap:12px;padding:16px;height:100%;box-sizing:border-box">
+      <div style="display:flex;align-items:center;width:100%;gap:12px">
+        <div>
+          <h1>Flight Search Optimizer</h1>
+          <p class="wf-muted">Houston to New York, flexible August window.</p>
+        </div>
+        <div style="flex:1"></div>
+        <span class="wf-pill accent">Sample data only</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:14px;flex:1;min-height:0">
+        <div class="wf-card" style="display:flex;flex-direction:column;gap:10px">
+          <strong>Trip Inputs</strong>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <label>Origin<input value="HOU" /></label>
+            <label>Destination<input value="NYC" /></label>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" checked /> Include nearby airports</label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <span class="wf-chip accent">United</span>
+            <span class="wf-chip">Southwest</span>
+            <span class="wf-chip">Chase 65k</span>
+          </div>
+          <label>Inline award import<textarea rows="4">southwest segments JSON</textarea></label>
+          <button class="primary">Find best options</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="wf-card" style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <strong>#1 HOU to LGA then JFK to IAH</strong>
+              <div style="flex:1"></div>
+              <span class="wf-pill accent">$11 cash</span>
+            </div>
+            <p class="wf-muted">Outbound Southwest balance + Return United balance. Four Houston-New York pairings qualify in the smoke test.</p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <span class="wf-chip">Baseline $326</span>
+              <span class="wf-chip">Saved $315</span>
+              <span class="wf-chip">Point cost $303</span>
+              <span class="wf-chip">Formula $332</span>
+            </div>
+          </div>
+          <div class="wf-card" style="display:flex;flex-direction:column;gap:6px">
+            <strong>Search Diagnostics</strong>
+            <p class="wf-muted">Airports: IAH, HOU -> JFK, LGA, EWR. Provider resolution comes from /api/providers/search.</p>
+          </div>
+          <div class="wf-card" style="display:flex;flex-direction:column;gap:6px">
+            <strong>Provider cards</strong>
+            <p class="wf-muted">The client keeps display metadata, but no longer duplicates provider ordering, merging, or ranking logic.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Screen>
+</WireframeBlock>
+
+<RichText id="outcome">
+
+### Outcome
+
+This change implements the first approved slice from the visual plan: Houston to New York route coverage and a thinner browser provider layer. The backend `/api/providers/search` route is now the source of truth for provider ordering, fallback warnings, diagnostics, insights, and ranked itineraries.
+
+The direct search smoke for `HOU` to `NYC` returned four accepted itineraries with airport expansion `IAH,HOU -> JFK,LGA,EWR`; the top option was `Outbound Southwest balance + Return United balance` with `$11.20` cash outlay.
+
+The continuation added dependency-free `.env` loading for local provider credentials, a checked-in `.env.example`, and a focused Node test suite that locks down validation, airport expansion, sample ranking, and the backend search route. The United worker now also supports `UNITED_AWARD_IMPORT_PATH`, which lets normalized United award data feed the existing automation lane before full browser automation exists.
+
+The latest continuation adds adult traveler count across the UI, normalized state, ranking engine, Amadeus cash search request, and result display. Cash fares, award taxes, miles, transfer points, and balance checks now scale to the full party.
+
+The current continuation adds configurable Amex and Chase card-travel redemption rates. These create additional payment options that can offset cash fares directly with bank points, while leaving airline transfer redemptions and cash fares available for comparison.
+
+The current optimizer fix makes `rankingFocus` apply to payment-method selection inside each itinerary, not only to the final itinerary sort. Effective-cost searches can now choose cash over a lower-cash point redemption when the user's point valuation makes cash economically cheaper. Award-program scope is also enforced in the ranking engine so direct miles and bank transfers cannot use unchecked airline programs.
+
+The current award-ingestion slice generalizes normalized award imports from United-only to every selected airline worker. Each program can point at its own JSON file, and worker failures are isolated so one bad import path does not prevent other configured award programs from contributing results.
+
+The current provider-resilience slice makes empty or fully failed award automation fall through to the next award source. The backend keeps the failed worker details in the response, adds a warning, and can still rank fallback sample awards instead of returning a misleading empty automation result.
+
+The current result-transparency slice adds a structured value breakdown to each itinerary and renders it under every result card. Users can now see the cash fare baseline, cash saved, point opportunity cost, time preference penalty, and final effective cost behind the ranking.
+
+The current import-safety slice validates normalized award imports before they reach ranking. Imported segments now need a positive cash/reference fare, positive miles, positive duration, and valid taxes/stops, so bad award exports cannot create fake free-cash options or invalid cpp math.
+
+The current cash-bookability slice separates reference fares from bookable cash fares. Award-only imports still use their reference fare for cpp and effective-cost math, but they no longer generate cash or card-travel payment options unless a cash-capable source supplies the same segment.
+
+The current live-cash normalization slice fixes Amadeus multi-traveler pricing. Amadeus returns `grandTotal`/`total` for the requested travelers, while the optimizer contract stores segment `cashPrice` per adult and scales it once in `search-engine.mjs`. The mapper now divides Amadeus totals by the requested adult count before ranking, and a fake local Amadeus test verifies a two-adult round trip totals `$800`, not `$1,600`.
+
+The current inline-import slice makes the award import lane usable from the local app. The planner now accepts pasted award JSON, sends it as `awardImports` in the backend search request, validates the high-level program shape in `search-state.mjs`, and lets each selected airline worker prefer inline request data before env-var import paths or sample fallback. A backend search test posts inline Southwest award data through `/api/providers/search` and verifies the automation worker reports `inline-southwest-awards`.
+
+The current airline-program expansion adds American and Alaska as direct-mile programs across the form, normalized search state, automation worker registry, inline/env import contract, display labels, docs, and tests. No Amex or Chase transfer path was added for those programs; they can rank when the user has direct airline miles or imports award data for that program.
+
+The latest configuration cleanup centralizes airline program metadata in `search-config.mjs`. `search-state.mjs`, `automation-workers.mjs`, `search-engine.mjs`, and `app.js` now derive allowed programs, default award scope, balance normalization, worker registration, form field reads, labels, award-program checkboxes, and airline balance inputs from `AIRLINE_PROGRAMS` / `AWARD_PROGRAM_IDS` instead of repeating the same airline list in each file.
+
+The current transfer cleanup centralizes transfer partner metadata as `TRANSFER_PARTNERS`, derives `PARTNER_MAP` from it for the ranking engine, generates transfer-ratio controls in the browser, and normalizes transfer ratios from the same source. The static United balance field was also removed from the bank-card row so generated airline balances are the only airline-balance controls.
+
+The current time-preference slice makes the soft preference penalty visible and configurable. The form now sends `timePreferencePenaltyDollars`, `search-state.mjs` validates it, and `search-engine.mjs` uses it per missed leg when calculating the visible value breakdown.
+
+The current insight and balance-impact slices make the result guidance more actionable. `buildSearchInsights` now keeps each bucket winner's booking method, points or miles used, cash savings, and time penalty; `search-engine.mjs` also attaches `balanceImpact` to each ranked itinerary so the API can show starting balance, amount used, and remaining balance for every touched currency. `app.js` renders both the flexible-date insight tradeoffs and the per-result balance impact row.
+
+</RichText>
+
+<FileTree
+  id="files-touched"
+  title="Files touched"
+  entries={[
+    { path: "app.js", change: "modified", note: "Delegates search execution to the provider helper instead of issuing a second fetch/fallback path, and parses pasted inline award JSON before submitting search." },
+    { path: "app.js", change: "modified", note: "Renders the value breakdown formula under each ranked itinerary." },
+    { path: "providers.js", change: "modified", note: "Replaced duplicated client-side provider orchestration with provider card metadata plus a thin /api/providers/search client." },
+    { path: "providers.js", change: "modified", note: "Provider card copy now describes multi-program imported/browser-driven award collection." },
+    { path: "search-config.mjs", change: "modified", note: "Added Houston metro expansion for IAH/HOU." },
+    { path: "data/sample-flights.json", change: "modified", note: "Added Houston-New York outbound and return sample segments with United and Southwest award options." },
+    { path: "README.md", change: "modified", note: "Documented Houston fixture coverage and backend search source-of-truth behavior." },
+    { path: "plans/flight-search-optimizer-completion/plan.mdx", change: "modified", note: "Marked the implemented plan items as completed direction." },
+    { path: ".env.example", change: "added", note: "Documents local credential keys without committing real secrets." },
+    { path: "server.mjs", change: "modified", note: "Loads .env before reading provider credential constants, preserves worker details across award source fallback, lets failed/empty automation fall through to sample awards, tracks cash-bookable sources separately from award-only sources, and normalizes Amadeus traveler totals to per-adult fares." },
+    { path: "automation-workers.mjs", change: "modified", note: "Worker registration is generated from shared airline metadata; every airline worker, including American and Alaska, can load normalized award segments from inline request data or its per-program import path before falling back to sample data." },
+    { path: "data/united-award-import.example.json", change: "added", note: "Documents the normalized United award import shape." },
+    { path: "data/southwest-award-import.example.json", change: "added", note: "Documents the normalized Southwest award import shape and proves imports are not United-specific." },
+    { path: "data/invalid-award-import.example.json", change: "added", note: "Regression fixture for missing reference fare validation." },
+    { path: "index.html", change: "modified", note: "Adds adult traveler count and soft time penalty fields, replaces hardcoded airline award/balance and transfer-ratio controls with metadata-rendered containers, removes the duplicate static United miles input, and keeps the inline award import textarea." },
+    { path: "app.js", change: "modified", note: "Renders airline award-scope checkboxes, airline balance inputs, and transfer-ratio controls from shared metadata, reads those generated fields plus soft time penalty, displays passenger count on ranked results, and renders richer flexible-date insight tradeoffs plus per-result balance impact." },
+    { path: "search-state.mjs", change: "modified", note: "Normalizes and validates passengers.adults, configurable soft time penalty, default award-program scope, airline balances, transfer ratios from shared metadata, and preserves request-scoped award import payloads." },
+    { path: "search-engine.mjs", change: "modified", note: "Scales cash, taxes, miles, transfer points, balance usage, card-travel redemption options, effective-cost payment selection, award-program scoping, configurable soft time penalties, per-itinerary value breakdowns, balance-impact summaries, richer insight bucket summaries, cash-bookability checks, and airline display labels from shared metadata." },
+    { path: "styles.css", change: "modified", note: "Adds compact styling for the value breakdown formula row and balance-impact chips." },
+    { path: "tests/search.test.mjs", change: "added", note: "Covers validation, Houston/New York ranking, backend search contract, fake Amadeus multi-adult fare normalization, inline request award imports, multi-program award imports, metadata-driven default award scope, transfer-ratio defaults, and UI containers, American/Alaska direct-program normalization, American inline award ranking, isolated import failures, invalid import reference fares, award-only cash-bookability, multi-passenger value breakdowns, airline and Chase balance-impact calculations, card-travel value breakdowns, ranking-focus payment selection, and award-program scoping." },
+    { path: "plans/flight-search-optimizer-recap/plan.mdx", change: "added", note: "This local recap artifact." }
+  ]}
+/>
+
+<RichText id="key-heading">
+
+## Key changes
+
+</RichText>
+
+<TabsBlock
+  id="key-changes-tabs"
+  tabs={[
+    {
+      id: "card-redemption-tab",
+      label: "card travel redemption",
+      blocks: [
+        {
+          id: "card-redemption-note",
+          type: "annotated-code",
+          data: {
+            filename: "search-engine.mjs",
+            language: "js",
+            code: "function buildCardTravelRedemptionOptions({ cashPrice, searchState, direction }) {\n  const options = [];\n  for (const currency of [\"amex\", \"chase\"]) {\n    const redemptionCpp = getCardTravelRedemptionCpp(searchState, currency);\n    if (redemptionCpp <= 0) {\n      continue;\n    }\n\n    const pointsNeeded = Math.ceil((cashPrice * 100) / redemptionCpp);\n    const pointsUsed = Math.min(searchState.balances[currency] ?? 0, pointsNeeded);\n    if (pointsUsed <= 0) {\n      continue;\n    }\n\n    const coveredCash = (pointsUsed * redemptionCpp) / 100;\n    const cashOutlay = roundCurrency(Math.max(cashPrice - coveredCash, 0));\n    const pointOpportunityCost = convertPointsToDollars(pointsUsed, searchState.valuations[currency]);\n    const effectiveCost = roundCurrency(cashOutlay + pointOpportunityCost);\n\n    options.push({\n      redemptionType: \"card-travel\",\n      referenceCashPrice: cashPrice,\n      cashOutlay,\n      pointOpportunityCost,\n      cashSavings: roundCurrency(cashPrice - cashOutlay),\n      effectiveCost,\n      pointsUsed,\n      centsPerPoint: redemptionCpp,\n      usage: { [currency]: pointsUsed },\n    });\n  }\n\n  return options;\n}",
+            annotations: [
+              { lines: "3-7", label: "Configurable", note: "Amex and Chase rates are inputs, not hard-coded product facts." },
+              { lines: "9-17", label: "Partial cover", note: "Available points can fully or partially offset the cash fare." },
+              { lines: "19-26", label: "Payment option", note: "The option enters the same ranking path as cash, airline miles, and transfers." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "value-breakdown-tab",
+      label: "value breakdown",
+      blocks: [
+        {
+          id: "value-breakdown-note",
+          type: "annotated-code",
+          data: {
+            filename: "search-engine.mjs",
+            language: "js",
+            code: "function buildValueBreakdown(payment, timePreferencePenalty) {\n  const paymentOptions = [payment.outboundOption, payment.returnOption];\n  const referenceCashPrice = roundCurrency(\n    paymentOptions.reduce((sum, option) => sum + option.referenceCashPrice, 0)\n  );\n  const pointOpportunityCost = roundCurrency(\n    paymentOptions.reduce((sum, option) => sum + option.pointOpportunityCost, 0)\n  );\n  const cashSavings = roundCurrency(paymentOptions.reduce((sum, option) => sum + option.cashSavings, 0));\n  const paymentEffectiveCost = roundCurrency(payment.effectiveCost);\n\n  return {\n    referenceCashPrice,\n    cashOutlay: payment.cashOutlay,\n    pointOpportunityCost,\n    cashSavings,\n    paymentEffectiveCost,\n    timePreferencePenalty: roundCurrency(timePreferencePenalty),\n    effectiveCost: roundCurrency(paymentEffectiveCost + timePreferencePenalty),\n  };\n}",
+            annotations: [
+              { lines: "2-9", label: "Formula inputs", note: "The itinerary combines per-leg baseline fares, point value costs, and cash savings." },
+              { lines: "10-19", label: "Inspectable total", note: "The API now returns the same effective-cost formula that the browser displays." },
+              { lines: "18-19", label: "Preference penalty", note: "Soft time-window misses remain visible as a separate cost instead of being hidden in the total." }
+            ]
+          }
+        },
+        {
+          id: "value-breakdown-ui-note",
+          type: "annotated-code",
+          data: {
+            filename: "app.js",
+            language: "js",
+            code: "function renderValueBreakdown(valueBreakdown) {\n  if (!valueBreakdown) {\n    return \"\";\n  }\n\n  return `\n    <div class=\"value-breakdown\">\n      <span>Cash fare baseline ${formatCurrency(valueBreakdown.referenceCashPrice)}</span>\n      <span>Cash saved ${formatCurrency(valueBreakdown.cashSavings)}</span>\n      <span>Point value cost ${formatCurrency(valueBreakdown.pointOpportunityCost)}</span>\n      <span>Time preference penalty ${formatCurrency(valueBreakdown.timePreferencePenalty)}</span>\n      <span>Formula total ${formatCurrency(valueBreakdown.effectiveCost)}</span>\n    </div>\n  `;\n}",
+            annotations: [
+              { lines: "6-13", label: "Result evidence", note: "Each result card now shows the economics behind the ranking." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "optimizer-focus-tab",
+      label: "optimizer focus",
+      blocks: [
+        {
+          id: "optimizer-focus-note",
+          type: "annotated-code",
+          data: {
+            filename: "search-engine.mjs",
+            language: "js",
+            code: "const bestPayment = itineraryOptions.sort((left, right) =>\n  comparePayments(left, right, searchState.rankingFocus)\n)[0];\n\nfunction comparePayments(left, right, rankingFocus = \"cash-first\") {\n  if (rankingFocus === \"effective-cost\") {\n    return comparePaymentsByEffectiveCost(left, right);\n  }\n\n  if (left.cashOutlay !== right.cashOutlay) {\n    return left.cashOutlay - right.cashOutlay;\n  }\n\n  if (left.effectiveCost !== right.effectiveCost) {\n    return left.effectiveCost - right.effectiveCost;\n  }\n\n  return left.pointsUsed - right.pointsUsed;\n}",
+            annotations: [
+              { lines: "1-3", label: "Focus-aware", note: "The selected ranking focus now chooses the best payment method for the itinerary." },
+              { lines: "5-8", label: "Effective cost", note: "Effective-cost searches prefer the economically cheapest method before lowering cash outlay." },
+              { lines: "10-19", label: "Cash-first default", note: "Cash-first behavior remains unchanged for the default optimizer mode." }
+            ]
+          }
+        },
+        {
+          id: "award-scope-note",
+          type: "annotated-code",
+          data: {
+            filename: "search-engine.mjs",
+            language: "js",
+            code: "const allowedAwardPrograms = new Set(searchState.awardPrograms ?? []);\nfor (const award of segment.awardOptions) {\n  if (!allowedAwardPrograms.has(award.program)) {\n    continue;\n  }\n\n  const awardMiles = award.miles * passengerCount;\n  const awardTaxes = roundCurrency(award.taxes * passengerCount);\n  // Direct airline balance and transfer options are evaluated only after scope passes.\n}",
+            annotations: [
+              { lines: "1-4", label: "Program gate", note: "Unchecked airline programs are removed before cpp, balance, and transfer checks run." },
+              { lines: "7-9", label: "Shared gate", note: "The same scope applies to direct airline miles and bank-point transfers." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "passengers-tab",
+      label: "search-engine passengers",
+      blocks: [
+        {
+          id: "passengers-note",
+          type: "annotated-code",
+          data: {
+            filename: "search-engine.mjs",
+            language: "js",
+            code: "const passengerCount = getPassengerCount(searchState);\nconst cashPrice = roundCurrency(segment.cashPrice * passengerCount);\n\nconst awardMiles = award.miles * passengerCount;\nconst awardTaxes = roundCurrency(award.taxes * passengerCount);\nconst airlineCpp = calculateValuePerPoint(cashPrice, awardTaxes, awardMiles);\n\nif ((searchState.balances[award.program] ?? 0) >= awardMiles) {\n  options.push({\n    cashOutlay: awardTaxes,\n    pointsUsed: awardMiles,\n    usage: { [award.program]: awardMiles },\n    awardMiles,\n  });\n}",
+            annotations: [
+              { lines: "1-2", label: "Cash total", note: "Per-person segment cash prices become total trip cash for ranking." },
+              { lines: "4-6", label: "Award total", note: "Miles and taxes scale before cpp checks." },
+              { lines: "8-14", label: "Balance usage", note: "Direct award balances are checked and consumed at party total." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "worker-tab",
+      label: "automation-workers.mjs",
+      blocks: [
+        {
+          id: "worker-note",
+          type: "annotated-code",
+          data: {
+            filename: "automation-workers.mjs",
+            language: "js",
+            code: "function createImportCapableWorker(name, program) {\n  const sampleWorker = createSampleWorker(name, program);\n\n  return {\n    name,\n    async collect({ segments, searchState, matchesFallbackWindow }) {\n      const inlineImport = getInlineAwardImport(searchState, program);\n      if (inlineImport) {\n        const importedSegments = loadImportedAwardRecords({\n          recordsPayload: inlineImport,\n          program,\n          workerName: this.name,\n          searchState,\n          matchesFallbackWindow,\n        });\n\n        return {\n          mode: `inline-${program}-awards`,\n          segments: importedSegments,\n        };\n      }\n\n      const importPath = getAwardImportPath(program);\n      if (importPath) {\n        const importedSegments = await loadImportedAwardSegments({\n          filePath: importPath,\n          program,\n          workerName: this.name,\n          searchState,\n          matchesFallbackWindow,\n        });\n\n        return {\n          mode: `imported-${program}-awards`,\n          segments: importedSegments,\n        };\n      }\n\n      return sampleWorker.collect({ segments, searchState, matchesFallbackWindow });\n    },\n  };\n}\n\nfunction getInlineAwardImport(searchState, program) {\n  return searchState.awardImports?.[program] ?? null;\n}",
+            annotations: [
+              { lines: "6-19", label: "Request import", note: "Inline award JSON from the UI wins for this search only." },
+              { lines: "21-34", label: "Env import", note: "Per-program import paths still support reusable local files." },
+              { lines: "36", label: "Fallback", note: "Without inline or file data, existing sample-backed behavior stays intact." },
+              { lines: "41-43", label: "Request contract", note: "Program ids map to keys on searchState.awardImports." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "import-validation-tab",
+      label: "import validation",
+      blocks: [
+        {
+          id: "import-validation-note",
+          type: "annotated-code",
+          data: {
+            filename: "automation-workers.mjs",
+            language: "js",
+            code: "function normalizeImportedAwardSegment(record, program, workerName) {\n  const cashPrice = normalizePositiveNumber(\n    record.cashPrice ?? record.referenceCashPrice,\n    \"cashPrice or referenceCashPrice\"\n  );\n  const awardOptions = Array.isArray(record.awardOptions)\n    ? record.awardOptions\n    : [{ program, miles: record.miles, taxes: record.taxes }];\n  const normalizedAwardOptions = awardOptions\n    .filter((award) => award.program === program || award.program === undefined)\n    .map((award) => ({\n      program,\n      miles: normalizePositiveNumber(award.miles, \"award miles\"),\n      taxes: normalizeNonNegativeNumber(award.taxes ?? 5.6, \"award taxes\"),\n    }));\n\n  if (normalizedAwardOptions.length === 0) {\n    throw new Error(`${formatProgramName(program)} award import segment has no award options for ${program}.`);\n  }\n\n  return {\n    origin: normalizeRequiredString(record.origin, \"origin\"),\n    destination: normalizeRequiredString(record.destination, \"destination\"),\n    airline: record.airline ?? formatProgramName(program),\n    durationMinutes: normalizePositiveNumber(record.durationMinutes, \"durationMinutes\"),\n    cashPrice,\n    awardOptions: normalizedAwardOptions,\n  };\n}",
+            annotations: [
+              { lines: "2-5", label: "Reference fare required", note: "Imported award records need a positive fare basis before cpp or effective cost can be computed." },
+              { lines: "9-15", label: "Award values required", note: "Miles must be positive and taxes must be valid before an option can enter ranking." },
+              { lines: "24-27", label: "No United default", note: "Missing airline names now default to the selected program, not always United." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "cash-bookability-tab",
+      label: "cash bookability",
+      blocks: [
+        {
+          id: "cash-bookability-server-note",
+          type: "annotated-code",
+          data: {
+            filename: "server.mjs",
+            language: "js",
+            code: "segments: result.segments.map((segment) => ({\n  ...segment,\n  cashAvailable: true,\n  sourceProviderId: source.name,\n  sourceProviderName: source.name,\n  sourceCapability: \"cash\",\n}))\n\nsegments: result.segments.map((segment) => ({\n  ...segment,\n  cashAvailable: false,\n  sourceProviderId: source.id,\n  sourceProviderName: source.name,\n  sourceCapability: \"awards\",\n}))\n\nmergedByKey.set(key, {\n  ...existing,\n  cashAvailable: Boolean(existing.cashAvailable || segment.cashAvailable),\n  awardOptions: dedupeAwardOptions([...existing.awardOptions, ...segment.awardOptions]),\n});",
+            annotations: [
+              { lines: "1-7", label: "Cash source", note: "Cash providers create bookable cash/card-travel options." },
+              { lines: "9-15", label: "Award source", note: "Award providers carry reference fares and award options, but not cash booking availability." },
+              { lines: "17-21", label: "Merge rule", note: "If the same segment appears from both lanes, cash availability is restored." }
+            ]
+          }
+        },
+        {
+          id: "cash-bookability-engine-note",
+          type: "annotated-code",
+          data: {
+            filename: "search-engine.mjs",
+            language: "js",
+            code: "function buildSegmentPaymentOptions(segment, searchState, direction, diagnostics) {\n  const options = [];\n  const passengerCount = getPassengerCount(searchState);\n  const cashPrice = roundCurrency(segment.cashPrice * passengerCount);\n  if (isCashBookable(segment)) {\n    options.push({\n      direction,\n      label: `${capitalize(direction)} cash`,\n      program: \"cash\",\n      referenceCashPrice: cashPrice,\n      cashOutlay: cashPrice,\n    });\n    options.push(...buildCardTravelRedemptionOptions({ cashPrice, searchState, direction }));\n  }\n\n  // Award options still use cashPrice as a reference fare for cpp and effective-cost math.\n}\n\nfunction isCashBookable(segment) {\n  return segment.cashAvailable !== false;\n}",
+            annotations: [
+              { lines: "5-14", label: "No fake cash", note: "Award-only imports skip cash and card-travel payment choices." },
+              { lines: "16", label: "Reference fare kept", note: "The same fare still supports cpp and effective-cost calculations for awards." },
+              { lines: "19-21", label: "Back compat", note: "Raw sample fixtures without the flag remain cash-bookable by default." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "server-tab",
+      label: "server.mjs",
+      blocks: [
+        {
+          id: "server-note",
+          type: "annotated-code",
+          data: {
+            filename: "server.mjs",
+            language: "js",
+            code: "const ROOT_DIR = fileURLToPath(new URL(\".\", import.meta.url));\n\nloadDotEnvFile();\n\nconst PORT = Number(process.env.PORT ?? 8000);\nconst AMADEUS_BASE_URL = process.env.AMADEUS_BASE_URL ?? \"https://test.api.amadeus.com\";\n\nfunction loadDotEnvFile() {\n  const envPath = join(ROOT_DIR, \".env\");\n  if (!existsSync(envPath)) {\n    return;\n  }\n\n  const lines = readFileSync(envPath, \"utf-8\").split(/\\r?\\n/);\n  for (const line of lines) {\n    const trimmed = line.trim();\n    if (!trimmed || trimmed.startsWith(\"#\")) {\n      continue;\n    }\n\n    const separatorIndex = trimmed.indexOf(\"=\");\n    if (separatorIndex <= 0) {\n      continue;\n    }\n\n    const key = trimmed.slice(0, separatorIndex).trim();\n    const value = unquoteEnvValue(trimmed.slice(separatorIndex + 1).trim());\n    if (key && process.env[key] === undefined) {\n      process.env[key] = value;\n    }\n  }\n}",
+            annotations: [
+              { lines: "1-6", label: "Early load", note: ".env is loaded before provider constants read credential values." },
+              { lines: "26-29", label: "Env precedence", note: "Already-set process environment values win over .env values." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "server-award-fallback-tab",
+      label: "award fallback",
+      blocks: [
+        {
+          id: "server-award-fallback-note",
+          type: "annotated-code",
+          data: {
+            filename: "server.mjs",
+            language: "js",
+            code: "async function resolveAwardSegments(searchState, attempts) {\n  const awardSources = buildAwardSourcePlan(searchState);\n  const attemptedWorkers = [];\n\n  for (const source of awardSources) {\n    const result = await source.query(searchState);\n    attemptedWorkers.push(...(result.workers ?? []));\n    if (result.ok) {\n      attempts.push({\n        name: source.name,\n        outcome: `loaded ${result.segments.length} award segment candidates`,\n      });\n\n      return {\n        providerName: source.name,\n        providerType: source.type,\n        segments: result.segments.map((segment) => ({\n          ...segment,\n          sourceProviderId: source.id,\n          sourceProviderName: source.name,\n          sourceCapability: \"awards\",\n        })),\n        workers: attemptedWorkers,\n      };\n    }\n\n    attempts.push({ name: source.name, outcome: result.reason });\n  }\n\n  return {\n    providerName: null,\n    providerType: null,\n    segments: [],\n    workers: attemptedWorkers,\n  };\n}",
+            annotations: [
+              { lines: "2-7", label: "Preserve workers", note: "Worker details accumulate even when an award source fails and the resolver tries the next source." },
+              { lines: "8-24", label: "Successful source", note: "The final award provider can be sample fallback while still carrying failed automation worker status." },
+              { lines: "27", label: "Attempt trail", note: "Failed automation reasons stay visible in the provider attempts list." },
+              { lines: "30-35", label: "No silent loss", note: "If every award source fails, the response still includes worker diagnostics." }
+            ]
+          }
+        },
+        {
+          id: "automation-empty-fallback-note",
+          type: "annotated-code",
+          data: {
+            filename: "server.mjs",
+            language: "js",
+            code: "async function queryAwardAutomation(searchState) {\n  const segments = await loadSampleSegments();\n  const automationResult = await runAutomationWorkers({\n    segments,\n    searchState,\n    matchesFallbackWindow,\n  });\n\n  if (automationResult.segments.length === 0) {\n    return {\n      ok: false,\n      reason: buildAutomationFailureReason(automationResult.attemptedWorkers),\n      segments: [],\n      workers: automationResult.attemptedWorkers,\n    };\n  }\n\n  return {\n    ok: true,\n    segments: automationResult.segments,\n    workers: automationResult.attemptedWorkers,\n  };\n}",
+            annotations: [
+              { lines: "8-14", label: "Fail open", note: "Empty automation output becomes a failed source so sample awards can run next." },
+              { lines: "11-13", label: "Explain why", note: "The failure reason and worker statuses are returned to the browser contract." },
+              { lines: "17-21", label: "Partial success", note: "Automation still wins when at least one worker returns award segments." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "tests-tab",
+      label: "tests/search.test.mjs",
+      blocks: [
+        {
+          id: "tests-note",
+          type: "annotated-code",
+          data: {
+            filename: "tests/search.test.mjs",
+            language: "js",
+            code: "test(\"Houston to New York sample search ranks qualifying award itineraries\", async () => {\n  const segments = await loadSampleSegments();\n  const { searchState, errors } = normalizeAndValidateSearchState(HOUSTON_NEW_YORK_SEARCH);\n  assert.deepEqual(errors, []);\n\n  const analysis = analyzeSearch(searchState, segments);\n\n  assert.deepEqual(analysis.diagnostics.airportScope.origins, [\"IAH\", \"HOU\"]);\n  assert.deepEqual(analysis.diagnostics.airportScope.destinations, [\"JFK\", \"LGA\", \"EWR\"]);\n  assert.equal(analysis.diagnostics.acceptedItineraries, 4);\n  assert.equal(analysis.itineraries[0].label, \"Outbound Southwest balance + Return United balance\");\n  assert.equal(analysis.itineraries[0].cashOutlay, 11.2);\n});",
+            annotations: [
+              { lines: "1-4", label: "Fixture contract", note: "The test uses the normalized real sample search input." },
+              { lines: "8-12", label: "Ranking proof", note: "Locks down airport expansion, accepted count, and the top optimization result." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "providers-tab",
+      label: "providers.js",
+      blocks: [
+        {
+          id: "providers-note",
+          type: "annotated-code",
+          data: {
+            filename: "providers.js",
+            language: "js",
+            code: "export async function resolveSegments(searchState) {\n  try {\n    const response = await fetch(\"/api/providers/search\", {\n      method: \"POST\",\n      headers: {\n        \"Content-Type\": \"application/json\",\n      },\n      body: JSON.stringify(searchState),\n    });\n\n    if (response.status === 400) {\n      return response.json();\n    }\n\n    if (!response.ok) {\n      return buildUnavailableSearchResult(searchState, `Backend returned HTTP ${response.status}.`);\n    }\n\n    return response.json();\n  } catch (error) {\n    return buildUnavailableSearchResult(searchState, `Backend search failed: ${error.message}`);\n  }\n}",
+            annotations: [
+              { lines: "1-8", label: "Canonical route", note: "The browser helper now posts to the same backend route used by the local server." },
+              { lines: "14-18", label: "No duplicate ranking", note: "Non-OK responses no longer trigger a separate client-side provider resolver." },
+              { lines: "20-22", label: "Usable failure", note: "Network failures return renderable guidance instead of throwing through the UI." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "config-tab",
+      label: "search-config.mjs",
+      blocks: [
+        {
+          id: "config-note",
+          type: "annotated-code",
+          data: {
+            filename: "search-config.mjs",
+            language: "js",
+            code: "export const AIRPORT_GROUPS = {\n  ORD: [\"ORD\", \"MDW\"],\n  MDW: [\"ORD\", \"MDW\"],\n  NYC: [\"JFK\", \"LGA\", \"EWR\"],\n  JFK: [\"JFK\", \"LGA\", \"EWR\"],\n  LGA: [\"JFK\", \"LGA\", \"EWR\"],\n  EWR: [\"JFK\", \"LGA\", \"EWR\"],\n  HOU: [\"IAH\", \"HOU\"],\n  IAH: [\"IAH\", \"HOU\"],\n  LAX: [\"LAX\", \"BUR\", \"SNA\", \"ONT\"],\n};",
+            annotations: [
+              { lines: "8-9", label: "Houston metro", note: "HOU and IAH now expand together for flexible airport searches." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "sample-tab",
+      label: "sample-flights.json",
+      blocks: [
+        {
+          id: "sample-note",
+          type: "annotated-code",
+          data: {
+            filename: "data/sample-flights.json",
+            language: "json",
+            code: "{\n  \"origin\": \"IAH\",\n  \"destination\": \"EWR\",\n  \"airline\": \"United\",\n  \"departure\": \"2026-08-05T07:35:00\",\n  \"cashPrice\": 176,\n  \"awardOptions\": [\n    { \"program\": \"united\", \"miles\": 12500, \"taxes\": 5.6 }\n  ]\n}\n\n{\n  \"origin\": \"JFK\",\n  \"destination\": \"IAH\",\n  \"airline\": \"United\",\n  \"departure\": \"2026-08-09T09:15:00\",\n  \"cashPrice\": 184,\n  \"awardOptions\": [\n    { \"program\": \"united\", \"miles\": 12500, \"taxes\": 5.6 }\n  ]\n}",
+            annotations: [
+              { lines: "1-9", label: "Outbound fixture", note: "Adds United Houston-to-New York award availability for the United-first path." },
+              { lines: "12-20", label: "Return fixture", note: "Adds the matching return direction so round-trip pairings can rank." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      id: "app-tab",
+      label: "app.js",
+      blocks: [
+        {
+          id: "app-note",
+          type: "annotated-code",
+          data: {
+            filename: "app.js",
+            language: "js",
+            code: "async function runSearch(searchState) {\n  return resolveSegments(searchState);\n}",
+            annotations: [
+              { lines: "1-3", label: "Single entry", note: "Search execution now goes through the provider helper, which calls the backend contract." }
+            ]
+          }
+        }
+      ]
+    }
+  ]}
+/>
+
+<RichText id="verification">
+
+### Verification
+
+Passed `node --check` for the touched JavaScript modules and `node --test tests/search.test.mjs`. The updated visual plan and recap also passed `plan local check`.
+
+The direct Node engine smoke for `HOU` to `NYC` produced `acceptedItineraries: 4`, expanded origins `IAH,HOU`, expanded destinations `JFK,LGA,EWR`, and a top `$11.20` one-adult cash-outlay option. The focused test suite passed with 28 tests, including inline request award imports, multi-program award imports, metadata-driven UI containers, metadata-driven transfer-ratio defaults, configurable soft time penalties, actionable insight tradeoffs, per-itinerary balance impact, American/Alaska direct-program normalization, American inline award ranking, isolated import failures, invalid import reference fares, award-only cash-bookability, backend fallback after automation import failure, Amadeus multi-adult fare normalization, multi-passenger scaling, card-travel cash offsets, effective-cost payment selection, and award-program scoping.
+
+</RichText>

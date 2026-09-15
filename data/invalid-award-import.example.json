@@ -1,0 +1,16 @@
+{
+  "segments": [
+    {
+      "origin": "IAH",
+      "destination": "EWR",
+      "airline": "United",
+      "cabin": "economy",
+      "departure": "2026-08-05T07:35:00",
+      "arrival": "2026-08-05T12:12:00",
+      "stops": 0,
+      "durationMinutes": 217,
+      "miles": 12500,
+      "taxes": 5.6
+    }
+  ]
+}

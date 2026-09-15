@@ -1,0 +1,298 @@
+---
+title: "Flight Search Optimizer: Status and Roadmap"
+kind: "plan"
+localOnly: true
+---
+
+### Outcome
+
+Turn the current local MVP into a trustworthy agent-native flight decision service that searches real cash and award inventory, applies the traveler’s actual balances and preferences, compares payment methods without hiding assumptions, and sends either an AI agent or the traveler to a safe booking path. “Done” for the first production-worthy release means an agent can start one bounded search, receive a small set of clearly different winners—lowest cash outlay, lowest effective economic cost, and fewest points required—drill into only the relevant finalists, understand how fresh and verifiable each result is, and open the correct airline or provider booking flow.
+
+Direct award ticketing, automatic bank-point transfers, stored payment cards, and autonomous purchases are deferred. Those workflows are operationally risky, often irreversible, and do not have a universal airline API.
+
+<Callout id="repository-status" tone="warning">
+
+The implementation is functional but not durably versioned. `main` still points to the initial two-line commit; the application, tests, provider layer, data fixtures, and plans are untracked, while `README.md` is modified. Capture a reviewed baseline commit before adding another provider.
+
+</Callout>
+
+### What exists today
+
+<Table
+  id="current-capabilities"
+  columns={["Area", "Current capability", "Confidence / gap"]}
+  rows={[
+    ["Optimization engine", "Ranks round trips across cash, airline miles, bank transfers, and card-travel redemptions; supports cash-first and effective-cost modes", "Deterministic core with focused tests; model boundaries need separation before adding providers"],
+    ["Trip flexibility", "Date windows, stay-length range, nearby airports, cabin, stops, time preferences, and adult count", "Strong for the curated airport map; airport coverage is intentionally small"],
+    ["Cash fares", "Credentialed Amadeus OAuth plus bounded SerpApi Google Flights discovery with cache-aware provenance and on-demand booking lookup", "Implemented with mocked-fetch coverage; real credentials and real-market smoke evidence are intentionally not stored in the repo"],
+    ["Award fares", "Normalized inline/file imports and per-program worker seams for seven airline programs", "Main gap: no automated live collector"],
+    ["Provider orchestration", "Shared search pipeline is available through the HTTP endpoint and agent-facing JSON CLI; provider-neutral orchestration now lives in an importable optimizer service", "Good foundation; MCP adapter and deadline-bounded aggregation remain"],
+    ["Booking", "None", "Search/decision support only; no deep link, price recheck, order, payment, or confirmation model"],
+    ["Quality", "28 Node tests pass and all JavaScript modules pass syntax checks", "No browser end-to-end suite, CI workflow, package scripts, coverage target, or production observability"],
+  ]}
+/>
+
+<Callout id="verified-baseline" tone="success">
+
+Repository check on 2026-09-13: 28/28 tests passed. The suite covers validation, airport expansion, cash and award ranking, party-size scaling, transfer ratios, card-travel redemptions, award imports, fallback behavior, Amadeus normalization, OAuth health, and 429 retries.
+
+</Callout>
+
+### SerpApi Google Flights cash integration
+
+The cash adapter uses the official `https://serpapi.com/search?engine=google_flights` endpoint. It maps `best_flights` and `other_flights` into the existing normalized segment contract, retaining bounded search links, cache metadata, price insights, baggage, airline, stop, duration, booking-token, and booking-option fields. `SERPAPI_API_KEY` is canonical; compatibility aliases are supported without exposing credentials.
+
+The existing optimizer searches flexible round trips as independent bounded one-way outbound and return requests. This is deliberate: SerpApi documents `departure_token` as the continuation needed to select return flights, but automatically following it for every outbound candidate would create uncontrolled request fan-out. The adapter preserves the token and exposes a round-trip parameter builder for explicit use, while initial searches do not perform departure-token or booking-token follow-ups. MCP `get_option_details` and `recheck_option` can fetch booking options for the selected finalist only.
+
+SerpApi cache use is allowed by default (`no_cache` is omitted), consistent with the documented exact-query cache and approximately one-hour cache lifetime. The documented response shape does not guarantee a cache-hit boolean, so cache-eligible responses remain `discovered_cached` unless freshness is explicit. `SERPAPI_MAX_REQUESTS_PER_SEARCH` bounds date sampling (six requests by default, split between directions), and `SERPAPI_TIMEOUT_MS` bounds each request. All cash results carry a caveat to verify current price and availability with the seller before booking. The implementation deliberately has no live smoke test; provider tests inject mocked fetch responses.
+
+### Product boundary
+
+The fastest credible product is a deterministic optimizer with a thin MCP interface, not an AI prompt that reasons over raw flight inventory and not a travel agency. Cash booking can eventually be added through an order-capable API, but award results should initially deep-link to the relevant loyalty program and require the traveler to confirm the listing still has the same price and availability before transferring points.
+
+Duffel exposes bookable offers and an Orders API, including price refresh, payment, hold support where available, and post-booking order state. Offers are short-lived and must be refreshed before purchase. Seats.aero exposes cached and live award-search APIs across many mileage programs, but personal API access is non-commercial and live search requires a commercial agreement. These constraints favor provider adapters plus handoff links rather than treating every result as directly bookable. See [Duffel Offers](https://duffel.com/docs/api/v2/offers), [Duffel Orders](https://duffel.com/docs/api/orders), and [Seats.aero API access](https://developers.seats.aero/reference/getting-started-p).
+
+### Seats.aero integration findings
+
+<Callout id="seats-aero-api-verified" tone="success">
+
+Seats.aero API documentation and a narrow authenticated smoke were reviewed on 2026-09-13. `SEATS_AERO_API_KEY` is present in `.env`; one cached search for `IAH,HOU -> JFK,LGA,EWR` from 2026-10-01 through 2026-10-07 returned HTTP 200 with 10 availability objects, and one `Get Trips` drill-down returned 11 trip-level itineraries plus booking links. No secret value was recorded.
+
+</Callout>
+
+<Table
+  id="seats-aero-capabilities"
+  columns={["API surface", "Useful fields / behavior", "Roadmap implication"]}
+  rows={[
+    ["Cached Search `GET /partnerapi/search`", "Multiple origin and destination airports, date ranges, source filters, cabin filters, direct-only and carrier filters, pagination cursor/skip, optional trip inclusion, summary mileage/taxes/seat/direct/raw fields by cabin", "Make this the first Seats.aero adapter path for normal searches; it fits flexible date and nearby-airport expansion without live-search licensing"],
+    ["Get Trips `GET /partnerapi/trips/{id}`", "Flight numbers, segment airports/times, fare class, aircraft, carriers, stops, duration, cabin, mileage cost, taxes, seat count when available, mixed-cabin percentage when available, and booking links", "Use this as `get_option_details` drill-down and evidence capture instead of stuffing every trip into the default MCP response"],
+    ["Bulk Availability `GET /partnerapi/availability`", "Large paginated route/date availability for one mileage program with region filters", "Defer until monitoring or broad discovery; it is less important than specific trip searches for the first local planner"],
+    ["Live Search `POST /partnerapi/live`", "Single route/date/program live provider query, 1-9 adult seats, 5-15 second expected response, optional smart cached fallback, synthetic IDs for non-cached results", "Capability-gate this behind `commercialAgreement: true`; Pro personal keys cannot use it, so phase-one recheck should be cached refresh/trip re-fetch, not live verification"],
+    ["OAuth and alerts", "OAuth access tokens can call partner APIs except live search; active alerts expose non-expired user alert configs without delivery addresses", "Keep out of the first local adapter, but add as a future profile/import path if this becomes multi-user or alert-aware"],
+  ]}
+/>
+
+Normalize Seats.aero as an award-only source. Its award observations can carry richer provenance than the current imports: `source`, `availabilityId`, `tripId`, `routeId`, `retrievedAt`, provider `UpdatedAt`, cabin, `MixedCabinPct`, `RemainingSeats`, `MileageCost`, `TotalTaxes`, `TaxesCurrency`, segment fare classes, aircraft, distances, carriers, and sanitized booking links. Seat counts are program-dependent and can be zero even when availability exists, so zero must mean "unknown or unavailable" unless the source is known to report counts reliably. Summary results and trips also include raw/direct variants for mileage, taxes, seat counts, airlines, and directness; preserve them as provider evidence while ranking on the selected cabin/trip fields.
+
+The local adapter should default to cached search with `include_trips=false`, fetch trips only for shortlisted availability IDs, dedupe by provider IDs plus normalized route/date/cabin, and page with `cursor`/`skip` while respecting the personal Pro quota of 1,000 calls per day. For flexible round trips, spend the quota on bounded outbound and return cached searches first, then trip drill-down for finalists. Treat booking links as handoff hints only; allowlist hosts and keep the verification state `discovered_cached` unless a stronger permitted check later succeeds. Cached results can still support a points-transfer recommendation when the response clearly says the traveler must confirm the award is still available at the same mileage price and taxes before making an irreversible transfer.
+
+<Diagram id="target-architecture" caption="Target boundaries: provider-specific data becomes one normalized snapshot; irreversible actions stay outside the optimizer until explicitly added and revalidated.">
+
+```html
+<div class="diagram-panel architecture" data-rough>
+  <section class="sources">
+    <strong>Discovery sources</strong>
+    <div class="diagram-card">Cash adapter<br/><span class="diagram-muted">Amadeus now; Duffel candidate</span></div>
+    <div class="diagram-card">Award adapter<br/><span class="diagram-muted">Licensed API first; imports as fallback</span></div>
+  </section>
+  <section class="core">
+    <strong>Trusted optimizer core</strong>
+    <div class="diagram-node">Normalized offer snapshots</div>
+    <div class="diagram-node">Eligibility + balance rules</div>
+    <div class="diagram-node">Pareto shortlist + explanations</div>
+  </section>
+  <section class="actions">
+    <strong>User actions</strong>
+    <div class="diagram-card">Recheck price and availability</div>
+    <div class="diagram-card">Open airline/provider booking</div>
+    <div class="diagram-card">Optional future cash order</div>
+  </section>
+</div>
+```
+
+```css
+.architecture { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; align-items:stretch; }
+.architecture section { display:flex; flex-direction:column; gap:10px; padding:12px; border:1px solid var(--wf-line); border-radius:var(--wf-radius); background:var(--wf-paper); }
+.architecture .core { background:var(--wf-accent-soft); }
+```
+
+</Diagram>
+
+### Agent-first architecture
+
+The optimizer should own the expensive and repeatable work: provider fanout, date and nearby-airport expansion, normalization, deduplication, balance feasibility, transfer math, cents-per-point calculations, dominance filtering, scoring, caching, and freshness checks. The AI agent should own only the judgment that benefits from language and context: clarifying an underspecified trip, deciding which tradeoff matters for this traveler, explaining finalists, and requesting a recheck.
+
+<Diagram id="agent-token-architecture" caption="Progressive disclosure keeps raw inventory and provider payloads outside the model context while preserving drill-down access for robust decisions.">
+
+```html
+<div class="diagram-panel agent-grid" data-rough>
+  <section class="agent-lane">
+    <strong>AI agent</strong>
+    <div class="diagram-card">Trip intent + profile reference</div>
+    <div class="diagram-card">Choose among 3–5 finalists</div>
+    <div class="diagram-card">Request detail or recheck</div>
+  </section>
+  <section class="mcp-lane">
+    <strong>Thin MCP adapter</strong>
+    <div class="diagram-node">Stable tool schemas</div>
+    <div class="diagram-node">Brief response by default</div>
+    <div class="diagram-node">Opaque search and option IDs</div>
+  </section>
+  <section class="engine-lane">
+    <strong>Optimizer service</strong>
+    <div class="diagram-card">Provider fanout + cache</div>
+    <div class="diagram-card">Normalize + solve</div>
+    <div class="diagram-card">Store full evidence server-side</div>
+  </section>
+  <section class="provider-lane">
+    <strong>External providers</strong>
+    <div class="diagram-card">Cash APIs</div>
+    <div class="diagram-card">Award APIs</div>
+    <div class="diagram-card">Booking handoff</div>
+  </section>
+</div>
+```
+
+```css
+.agent-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; align-items:stretch; }
+.agent-grid section { display:flex; flex-direction:column; gap:10px; padding:12px; border:1px solid var(--wf-line); border-radius:var(--wf-radius); background:var(--wf-paper); }
+.agent-grid .mcp-lane, .agent-grid .engine-lane { background:var(--wf-accent-soft); }
+```
+
+</Diagram>
+
+<Callout id="decision-mcp-boundary" tone="decision">
+
+Build one reusable optimizer service and put a thin MCP adapter over it. The browser UI, MCP server, CLI, and future scheduler must call the same application functions; none should reimplement ranking or provider fallback. Start with a local stdio MCP server for low setup and no network-auth surface. Add Streamable HTTP only if agents need to run on other machines.
+
+</Callout>
+
+### MCP tools and token contract
+
+<Table
+  id="mcp-tool-contract"
+  columns={["Tool", "Purpose", "Default response"]}
+  rows={[
+    ["start_flight_search", "Start provider collection and deterministic optimization without holding an agent tool call open", "Search ID, accepted query hash, provider deadlines, and initial status"],
+    ["get_search_results", "Poll one search until complete or consume deadline-bounded partial results", "Status, assumptions, coverage/freshness summary, and at most 5 labeled finalists"],
+    ["get_option_details", "Inspect one finalist when routing, cabin, transfer path, or fare conditions matter", "Only the selected itinerary’s segments, payment math, caveats, and source evidence"],
+    ["compare_options", "Compute exact differences among 2–4 option IDs", "Compact field-level deltas and dominated/not-dominated explanation"],
+    ["recheck_option", "Request the strongest refresh the selected provider supports before booking or transferring points", "Capability state, unchanged/changed/unavailable result, and replacement when possible"],
+    ["get_traveler_profile", "Read balances, valuations, constraints, and profile version", "Short summary; secrets and provider credentials are never returned"],
+  ]}
+/>
+
+`start_flight_search` should accept structured constraints rather than prose: airports or metro areas, outbound and return windows, passenger count, cabin, maximum stops, hard constraints, soft preferences, `profileId`, and an optional optimization focus. Each provider receives a deadline and failures remain isolated. `get_search_results` returns `pending`, `partial`, `complete`, or `failed`; partial results list unfinished providers and are deterministically replaced by the completed snapshot rather than silently merged in the agent context. The compact result packet looks like:
+
+<Json
+  id="compact-decision-packet"
+  title="Default MCP search response"
+  collapsedDepth={2}
+  json={'{\n  "schemaVersion": "1.0",\n  "searchId": "srch_01...",\n  "status": "complete",\n  "profileVersion": 7,\n  "coverage": { "cash": "provider_refreshed", "awards": "discovered_cached", "retrievedAt": "..." },\n  "assumptions": ["Amex valued at 1.6 cpp", "nearby airports enabled"],\n  "candidates": [\n    {\n      "optionId": "opt_low_cash",\n      "labels": ["lowest_cash"],\n      "route": "IAH-EWR / JFK-IAH",\n      "dates": "2026-11-05 / 2026-11-10",\n      "cash": { "currency": "USD", "outlay": 11.2 },\n      "points": { "program": "united", "amount": 25000 },\n      "effectiveCost": { "currency": "USD", "amount": 336.2 },\n      "durationMinutes": 438,\n      "verification": "discovered_cached",\n      "reasonCodes": ["LOWEST_CASH", "SAVES_412_USD_VS_EQUIVALENT_CASH"]\n    }\n  ],\n  "nextActions": ["get_option_details", "recheck_option"],\n  "truncated": false\n}'}
+/>
+
+The default response should omit raw provider JSON, rejected itineraries, complete date matrices, repeated segment metadata, and verbose prose. Version the JSON schema; use ISO currencies, integer points, numeric money amounts, explicit nulls, deterministic ordering, and stable reason codes. Cap brief search responses at 6 KB, five candidates, six segments per candidate, and 240 characters per free-text field; set `truncated: true` if any limit applies. Cap option-detail responses at 12 KB. Keep full evidence behind the `searchId` for 30 minutes in the first local implementation; IDs expire on process restart and are bound to the query hash and profile version. Support `responseDetail: "brief" | "standard"`; reserve verbose/debug output for developers rather than advertising it to normal agents.
+
+<Callout id="decision-profile-boundary" tone="decision">
+
+Store balances and valuation assumptions in a local traveler profile referenced by `profileId` and `profileVersion`. Distinguish posted balance, reserved balance, and available balance; record transfer ratios, increments, bonuses, expiry, expected transfer time, account-holder restrictions, and split-tender eligibility only when known. Search results record the profile version used, so an agent cannot silently compare an old result against new balances or recommend two mutually impossible redemptions. Provider credentials remain in environment variables or an OS secret store and never enter prompts, MCP responses, or saved search results.
+
+</Callout>
+
+<Callout id="decision-trust-model" tone="decision">
+
+Optimize the first release for one person and local agents on one machine. The stdio MCP process may trust its local caller, but it must still treat provider text and URLs as untrusted data, redact secrets from logs, and allowlist booking-link hosts. Multi-user OAuth, encrypted token storage, tenant authorization, remote MCP authentication, and retention controls are a separate architecture gate—not incremental flags on the personal build.
+
+</Callout>
+
+Use explicit verification states across providers: `discovered_cached`, `provider_refreshed`, `airline_verified`, `expired`, and `unverifiable`. `recheck_option` advances the state only when the provider supports a stronger check. It must never describe cached Seats.aero inventory as verified merely because a booking link exists.
+
+### Hard-to-reverse decisions
+
+<Callout id="decision-offer-contract" tone="decision">
+
+Adopt three provider-neutral layers before integrating more sources. `ObservedItinerary` contains immutable provider facts and provenance; `PaymentStrategy` derives cash, direct-mile, transfer, and card-redemption choices for one profile version; `RankedCandidate` adds objective labels, penalties, confidence, and explanations. Preserve provider IDs separately from stable internal IDs. Provider facts include currency, per-passenger pricing, taxes and fees, passenger count, marketing and operating carriers, flight numbers, cabin and booking class by segment, mixed-cabin details, retrieval and expiry times, source query scope, and an evidence hash. Capability-dependent fields such as seat count, fare conditions, booking URL, and live verification remain explicitly nullable. Ranking must never infer freshness or bookability from a provider name.
+
+</Callout>
+
+<Callout id="decision-ranking" tone="decision">
+
+Return a Pareto shortlist instead of only one total ordering. Keep the current score calculations, but label independent winners for cash outlay, effective cost, points required, duration, schedule fit, and verification risk. Treat cents per point as an explanatory metric and optional eligibility threshold—not a minimization objective—because a high cpp value can still belong to an unnecessarily expensive itinerary. A weighted “best overall” can remain, with every valuation and penalty visible and editable.
+
+</Callout>
+
+<Callout id="decision-booking" tone="decision">
+
+Phase-one booking means recheck plus handoff. Do not automatically transfer points or represent cached award inventory as guaranteed, but allow recommendations that say a transfer is worth considering when the traveler first confirms the award is still available at the same mileage price and taxes. If direct cash booking is added later, isolate passenger PII, payment, idempotency, order state, and cancellation/change handling from the search contract.
+
+</Callout>
+
+### Recommended implementation sequence
+
+1. **Checkpoint, confirm the trust model, and simplify the baseline.** Proceed with the recommended single-user local boundary unless the product is intended for outside users; a multi-user answer pauses provider and MCP implementation until licensing, OAuth, authorization, and retention are designed. Review and commit the current untracked implementation. Add a minimal `package.json` with `start`, `cli`, `test`, and `check` scripts; ignore `.plan-url` and other local bridge artifacts; add CI for syntax and tests. Reconcile stale provider presentation—`providers.js` marks Amadeus as planned even though `server.mjs` implements it—and generate provider capabilities from one server-owned registry. The JSON CLI is now the primary agent integration surface while the browser remains optional.
+
+2. **Introduce the three-layer decision model.** Define provider-neutral observed itineraries, profile-derived payment strategies, and ranked candidates, then adapt Amadeus, sample cash, and award imports before merging. Preserve exact provider offer IDs and timestamps. Change `mergeSegmentsForSearch` in `server.mjs` so deduplication cannot accidentally merge different fare brands, award buckets, or independently expiring observations that happen to share the same schedule.
+
+3. **Improve optimization semantics.** In `search-engine.mjs`, produce named winners and a nondominated shortlist. Add fare conditions, baggage, mixed-cabin percentage, positioning-airport cost, and transfer-bonus assumptions as explicit fields rather than hidden penalties. Keep cash-outlay and effective-cost objectives separate. Add a confirmation caveat whenever bank points fund an award: check that the listing is still available at the same mileage price and taxes before transferring points.
+
+4. **Extract an application service and add the local MCP adapter.** The provider-neutral orchestration from `resolveSearch` now lives in importable `optimizer-service.mjs` functions with no HTTP request/response dependency, and both the HTTP and CLI paths use that shared pipeline. A local stdio `mcp-server.mjs` now exposes the planned search, polling, detail, comparison, recheck, and profile tools with opaque IDs, in-memory 30-minute snapshots, and compact bounded responses. Next, replace the current first-success provider resolution with deadline-bounded aggregation so useful sources can contribute concurrently while failures remain isolated. Enforce stricter per-field string and segment-count limits at serialization time. Keep the current browser endpoint as another adapter over the same stored search snapshot; parity means both adapters serialize that snapshot, not that two volatile live searches coincidentally match.
+
+5. **Add Seats.aero cached award discovery behind the existing worker seam.** For the personal local tool, implement cached search first because the current `.env` API key works for authenticated cached queries and Pro access does not permit Live Search. Map cached availability summaries and trip drill-downs into the same normalized contract in a new `award-providers/seats-aero.mjs`; retain inline/file imports as deterministic fallback and test fixture. Store source IDs and timestamps, fetch trip-level details only for shortlisted availability objects, preserve booking links as untrusted handoff hints, and expose `liveSearchSupported: false` unless a commercial agreement is configured. Do not begin with brittle browser automation unless API access cannot cover a required airline and the airline terms permit automation.
+
+6. **Add freshness-aware booking handoff.** Store `retrievedAt`, `expiresAt`, and a booking URL for every actionable result. Add one application-level recheck function shared by the MCP `recheck_option` tool and `POST /api/offers/recheck`. Award rechecks should return an explicit stale/unavailable state; cash rechecks should surface price changes and fare conditions. Log only non-sensitive search and provider telemetry.
+
+7. **Add monitoring last.** Once live provider data is trustworthy, persist saved searches and run bounded scheduled refreshes with deduped alerts. Alert on a material improvement—lower cash, fewer points, better schedule—not every inventory fluctuation.
+
+In-app checkout remains a future product decision outside this roadmap. It would require a separate design for passenger PII, payment security, idempotent orders, confirmation, changes, cancellations, and traveler support.
+
+<FileTree
+  id="implementation-map"
+  title="Expected code areas"
+  entries={[
+    { path: "package.json", change: "added", note: "Reproducible start/test/check commands." },
+    { path: ".github/workflows/ci.yml", change: "added", note: "Syntax and Node test gate." },
+    { path: "decision-model.mjs", change: "added", note: "Observed itineraries, profile-derived payment strategies, ranked candidates, validation, freshness, and IDs." },
+    { path: "optimizer-service.mjs", change: "added", note: "Provider-neutral application-level search orchestration shared by every adapter." },
+    { path: "mcp-server.mjs", change: "added", note: "Thin stdio MCP tools with bounded progressive-disclosure responses and in-memory search snapshots." },
+    { path: "profile-store.mjs", change: "added", note: "Versioned local balances, valuations, transfer rules, and traveler preferences without provider secrets." },
+    { path: "server.mjs", change: "modified", note: "HTTP adapter over the application service, provider registry, and source telemetry." },
+    { path: "search-engine.mjs", change: "modified", note: "Pareto labels, extra cost dimensions, and transfer safety warnings." },
+    { path: "search-state.mjs", change: "modified", note: "Normalize new user assumptions without provider-specific fields." },
+    { path: "award-providers/seats-aero.mjs", change: "added", note: "Cached Seats.aero award adapter with summary search, trip drill-down, provider evidence, quota limits, and live-search capability gating." },
+    { path: "automation-workers.mjs", change: "modified", note: "Delegate to award adapters; keep imports as fallback fixtures." },
+    { path: "app.js", change: "modified", note: "Named winners, freshness, recheck state, booking handoff, and stale/unavailable errors." },
+    { path: "tests/search.test.mjs", change: "modified", note: "Contract, deduplication, Pareto, freshness, and provider failure coverage." },
+    { path: "tests/mcp.test.mjs", change: "added", note: "Tool schema, token-bounded output, opaque IDs, profile-version, and drill-down coverage." },
+    { path: "tests/browser.test.mjs", change: "added", note: "Real browser journey from search through recheck and handoff readiness." },
+  ]}
+/>
+
+### Milestones and exit criteria
+
+<Table
+  id="milestones"
+  columns={["Milestone", "Exit criteria", "What it unlocks"]}
+  rows={[
+    ["M0 — Durable baseline", "Current app committed; scripts and CI green; provider status consistent", "Safe iteration and review"],
+    ["M1 — Trustworthy search model", "Observed inventory is separate from payment and ranking; every result has provenance, capability-aware freshness, and correct deduplication; Pareto winners are tested", "Reliable comparison across heterogeneous sources"],
+    ["M2 — Agent interface", "Local MCP server supports asynchronous status, returns no more than 5 finalists within 6 KB, and browser/MCP adapters serialize the same stored snapshot", "Low-token, robust agent decisions"],
+    ["M3 — Cached award discovery", "Seats.aero cached search works end to end with trip drill-down, seat/cabin/tax caveats, booking-link handoff, quota limits, and import fallback", "Real cash-versus-points decisions without requiring live-search licensing"],
+    ["M4 — Booking handoff", "Selected result rechecks, reports changes, and opens the correct booking flow", "Usable path from recommendation to purchase"],
+    ["M5 — Monitoring", "Saved searches refresh within quotas and alerts dedupe material improvements", "Ongoing optimization"],
+  ]}
+/>
+
+### Risks and controls
+
+- **Stale or incomplete inventory:** show retrieval time, distinguish cached from live, recheck before handoff, and never promise availability.
+- **Incorrect award value:** compare against the same or a defensible equivalent cash itinerary; separate unavoidable taxes from optional fees; expose the point valuation and transfer ratio.
+- **Mixed-cabin and phantom-space errors:** retain cabin per segment, seat-count confidence, and provider caveats; avoid summarizing an itinerary only by its best cabin.
+- **Provider terms and quotas:** use documented APIs and confirm commercial/personal rights before integration; bound date/airport fanout and cache responsibly.
+- **Seats.aero live-search rights:** personal Pro keys can use cached partner APIs but not Live Search; capability-gate live rechecks and keep cached results labeled `discovered_cached`.
+- **Irreversible transfers:** allow caveated transfer recommendations, but require explicit user confirmation outside the search step and display that award space, mileage price, and taxes can change before points are moved.
+- **Booking liability:** keep direct checkout deferred until support, refunds, changes, payment security, and PII retention are intentionally designed.
+
+### Verification
+
+Run `node --test` and syntax checks in CI, then exercise these end-to-end fixtures and live smokes:
+
+1. Sample-only HOU/NYC search returns the existing deterministic award winner and all source metadata.
+2. Fake Amadeus and fake award-provider servers return overlapping schedules with distinct fare/award IDs; normalization preserves both and Pareto labels are correct.
+3. A stale award result fails recheck and disables booking handoff without losing the original explanation.
+4. A cash recheck with a changed price shows the delta and requires a second user confirmation.
+5. A two-adult mixed-cabin award result retains per-segment cabin and seat-count limitations.
+6. With real developer credentials, one narrow route/date search confirms provider auth, bounded request count, correct totals, freshness, and a non-sample source badge without recording secrets or passenger data.
+7. An MCP search over a wide flexible window stays below the configured response-size budget, returns at most five nondominated finalists, and yields the same winners as the browser/API path.
+8. `get_option_details` and `recheck_option` reject option IDs from another search and results created with an obsolete profile version are clearly marked.
+9. A real Seats.aero cached-search smoke with `SEATS_AERO_API_KEY` performs a bounded route/date/source query, fetches trips for one availability ID, records source IDs and timestamps, and redacts credentials from logs.
+10. Seats.aero adapter tests verify that zero seat counts remain capability-aware, mixed-cabin percentages are preserved, booking links are allowlisted before display, and live search is reported unavailable without a commercial agreement flag.
