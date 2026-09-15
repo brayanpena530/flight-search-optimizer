@@ -87,18 +87,12 @@ function renderAirlineBalanceControls() {
 }
 
 function renderTransferRatioControls() {
-  transferRatioControlsRoot.innerHTML = Object.entries(TRANSFER_PARTNERS)
-    .flatMap(([currency, partners]) =>
-      partners.map(
-        (program) => `
-          <label>
-            <span>${formatProgram(currency)} to ${formatAirlineProgramName(program)}</span>
-            <input name="${transferRatioFieldName(currency, program)}" type="number" min="0.01" step="0.01" value="1.00" required />
-          </label>
-        `
-      )
-    )
-    .join("");
+  transferRatioControlsRoot.innerHTML = `
+    <div class="transfer-ratio-status">
+      <strong>Automatic official-source lookup</strong>
+      <span>Amex uses its Membership Rewards transfer portal. Chase uses the configured eligible-card partner page. The server applies the freshest verified local records before ranking.</span>
+    </div>
+  `;
 }
 
 function hydrateForm() {

@@ -88,6 +88,7 @@ function buildCompactResult(result, searchState, requestedLimit) {
     diagnosticSummary: result.diagnosticSummary,
     recommendations: result.recommendations,
     warnings: result.warnings,
+    transferPartnerData: result.transferPartnerData ?? null,
     attempts: result.attempts,
     workers: result.workers,
     truncated: result.itineraries.length > limit,

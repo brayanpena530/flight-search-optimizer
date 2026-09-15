@@ -336,6 +336,21 @@ select:focus {
   margin: 12px 2px 0;
 }
 
+.transfer-ratio-status {
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+  background: var(--surface-strong);
+  font-size: 0.84rem;
+}
+
+.transfer-ratio-status strong {
+  color: var(--text);
+}
+
 .insights-grid {
   display: grid;
   gap: 12px;

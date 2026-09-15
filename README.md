@@ -17,6 +17,7 @@ Local planning app for comparing cash, airline miles, and transferable-card-poin
 - Presents a practical shortlist above the full ranked results: best overall, cheapest, best schedule, fastest, best cash, and best award when award availability exists. Duplicate winners are consolidated with multiple category labels and link back to their stable full-result option.
 - Exposes itinerary quality and ticketing context, including elapsed time, air time, layovers, overnight travel, early-return and separate-ticket risks, reservation protection, baggage rules, and change implications.
 - Preserves provider provenance, freshness caveats, diagnostics, award rejection reasons, search links, and booking links that require a final price and availability recheck.
+- Maintains a local official-source transfer-partner cache. Records are refreshed automatically when older than seven days; if refresh fails, the last known ratios remain usable and a warning is returned.
 
 ## Run locally
 
@@ -54,6 +55,8 @@ Use `--depart-by` and `--return-by` to set the end of flexible date windows; wit
 The CLI output contract is stable across compact and full modes. Both modes return `outputMode`, `candidates`, and stable `option_N` identifiers. Compact mode contains normalized summaries. Full mode adds a `details` object keyed by those same IDs; each entry contains the complete normalized itinerary, segments, and provider evidence. Full mode no longer replaces `candidates` with a separate `itineraries` field.
 
 The browser search API (`POST /api/providers/search`) also returns `highlightedCandidates`. Each highlight includes a category, display label, stable `optionId`, and the corresponding full itinerary. The browser renders these winners first, then keeps every ranked candidate in the complete results list below. If no award itinerary qualifies, `bestAward` is omitted rather than implying that points are available.
+
+Transfer ratios are refreshed from Amex's [official Membership Rewards transfer portal](https://global.americanexpress.com/rewards/transfer) and Chase's [official Sapphire Preferred partner page](https://www.chase.com/sapphire-cards/personal/preferred), then stored in `data/transfer-partners.json`. The search response includes `transferPartnerData.status` and `fetchedAt`. A refresh is attempted only when the cache is more than seven days old; failed refreshes fall back to the last known records and add a warning. Chase partner eligibility is currently represented for Sapphire Preferred and should be expanded if the app adds support for other Chase card products.
 
 ```json
 {

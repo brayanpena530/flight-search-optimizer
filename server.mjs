@@ -13,6 +13,7 @@ import {
 import { expandAirports } from "./search-config.mjs";
 import { createOptimizerService, segmentSignature } from "./optimizer-service.mjs";
 import { normalizeAndValidateSearchState } from "./search-state.mjs";
+import { getTransferPartnerCache, transferRatiosFromRecords } from "./transfer-partner-cache.mjs";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 
@@ -246,7 +247,23 @@ export async function buildProviderHealth() {
 }
 
 const optimizerService = createOptimizerService({ resolveCashSegments, resolveAwardSegments });
-export const resolveSearch = optimizerService.resolveSearch;
+export async function resolveSearch(searchState) {
+  const transferCache = await getTransferPartnerCache();
+  const enrichedSearchState = {
+    ...searchState,
+    transferRatios: transferRatiosFromRecords(transferCache.records),
+  };
+  const result = await optimizerService.resolveSearch(enrichedSearchState);
+  return {
+    ...result,
+    transferPartnerData: {
+      status: transferCache.status,
+      fetchedAt: transferCache.fetchedAt,
+      records: transferCache.records,
+    },
+    warnings: [...(transferCache.warnings ?? []), ...(result.warnings ?? [])],
+  };
+}
 
 async function resolveCashSegments(searchState, attempts) {
   const cashSources = buildCashSourcePlan(searchState);

@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "fetchedAt": "2026-09-15T15:40:06.243Z",
+  "records": [
+    {
+      "sourceCurrency": "amex",
+      "destinationProgram": "delta",
+      "ratio": 1,
+      "sourceUrl": "https://global.americanexpress.com/rewards/transfer",
+      "sourceType": "official-public-transfer-portal"
+    },
+    {
+      "sourceCurrency": "amex",
+      "destinationProgram": "jetblue",
+      "ratio": 0.8,
+      "sourceUrl": "https://global.americanexpress.com/rewards/transfer",
+      "sourceType": "official-public-transfer-portal"
+    },
+    {
+      "sourceCurrency": "chase",
+      "destinationProgram": "united",
+      "ratio": 1,
+      "sourceUrl": "https://www.chase.com/sapphire-cards/personal/preferred",
+      "sourceType": "official-public-card-page",
+      "cardProduct": "Chase Sapphire Preferred"
+    },
+    {
+      "sourceCurrency": "chase",
+      "destinationProgram": "southwest",
+      "ratio": 1,
+      "sourceUrl": "https://www.chase.com/sapphire-cards/personal/preferred",
+      "sourceType": "official-public-card-page",
+      "cardProduct": "Chase Sapphire Preferred"
+    },
+    {
+      "sourceCurrency": "chase",
+      "destinationProgram": "jetblue",
+      "ratio": 1,
+      "sourceUrl": "https://www.chase.com/sapphire-cards/personal/preferred",
+      "sourceType": "official-public-card-page",
+      "cardProduct": "Chase Sapphire Preferred"
+    }
+  ]
+}
