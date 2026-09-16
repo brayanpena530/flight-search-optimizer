@@ -267,6 +267,10 @@ function summarizeCandidate(itinerary, index) {
     bookingType: itinerary.bookingType ?? null,
     bookingLabel: itinerary.bookingLabel ?? itinerary.bookingType ?? null,
     ticketing: itinerary.ticketing ?? null,
+    flightDetails: {
+      outbound: summarizeFlightLeg(itinerary.outbound),
+      return: summarizeFlightLeg(itinerary.inbound),
+    },
     cash: { currency: "USD", outlay: itinerary.cashOutlay ?? null },
     points: { program: getSingleProgram(itinerary), amount: itinerary.pointsUsed ?? null },
     effectiveCost: { currency: "USD", amount: itinerary.effectiveCost ?? null },
@@ -283,6 +287,30 @@ function summarizeCandidate(itinerary, index) {
       ...(itinerary.inbound?.providerCaveats ?? []),
     ])].slice(0, 4),
     caveatBadges: buildCaveatBadges(itinerary.caveats ?? []),
+  };
+}
+
+function summarizeFlightLeg(segment) {
+  if (!segment) return null;
+  const flights = (segment.flightSegments ?? []).slice(0, 6).map((flight) => ({
+    airline: flight.marketingCarrier ?? flight.airline ?? segment.airline ?? null,
+    flightNumber: flight.flightNumber ?? null,
+    origin: flight.origin ?? null,
+    destination: flight.destination ?? null,
+    departure: flight.departure ?? null,
+    arrival: flight.arrival ?? null,
+    cabin: flight.cabin ?? segment.cabin ?? null,
+  }));
+  return {
+    airline: segment.airline ?? flights[0]?.airline ?? null,
+    origin: segment.origin ?? flights[0]?.origin ?? null,
+    destination: segment.destination ?? flights.at(-1)?.destination ?? null,
+    departure: segment.departure ?? flights[0]?.departure ?? null,
+    arrival: segment.arrival ?? flights.at(-1)?.arrival ?? null,
+    stops: segment.stops ?? Math.max(flights.length - 1, 0),
+    durationMinutes: segment.durationMinutes ?? null,
+    flightNumbers: flights.map((flight) => flight.flightNumber).filter(Boolean),
+    flights,
   };
 }
 

@@ -49,20 +49,21 @@ test("SerpApi request construction distinguishes one-way and round-trip searches
   assert.equal(roundTrip.get("return_date"), "2026-10-05");
 });
 
-test("SerpApi round-trip search planning is bounded and does not use departure-token fan-out", () => {
+test("SerpApi round-trip planning reserves a bounded native round-trip follow-up", () => {
   const plan = buildSerpApiSearchRequests({
     ...SEARCH_STATE,
     requestBudget: 4,
   });
-  assert.equal(plan.requests.length, 4);
-  assert.equal(plan.truncated, false);
+  assert.equal(plan.requests.length, 3);
+  assert.equal(plan.truncated, true);
   assert.deepEqual(plan.requests.map((request) => request.direction), [
+    "round-trip",
     "outbound",
-    "outbound",
-    "return",
     "return",
   ]);
-  assert.equal(plan.requests.some((request) => request.departureToken), false);
+  assert.equal(plan.departureTokenBudget, 1);
+  assert.equal(plan.requests[0].nativeRoundTrip, true);
+  assert.equal(plan.requests[0].returnDate, "2026-10-05");
   assert.equal(plan.requests[2].origin, "JFK");
   assert.equal(plan.requests[2].destination, "IAH");
 
@@ -72,13 +73,10 @@ test("SerpApi round-trip search planning is bounded and does not use departure-t
     latestReturn: "2026-10-12",
     requestBudget: 6,
   });
-  assert.equal(widerPlan.requests.length, 6);
+  assert.equal(widerPlan.requests.length, 3);
   assert.deepEqual(widerPlan.requests.map((request) => request.direction), [
+    "round-trip",
     "outbound",
-    "outbound",
-    "outbound",
-    "return",
-    "return",
     "return",
   ]);
 });
@@ -195,7 +193,7 @@ test("SerpApi search handles partial network and malformed responses without abo
 
 test("SerpApi search enforces the configured request budget and only opts into no_cache explicitly", async () => {
   const plan = buildSerpApiSearchRequests({ ...SEARCH_STATE, requestBudget: 2 });
-  assert.equal(plan.requests.length, 2);
+  assert.equal(plan.requests.length, 1);
   assert.equal(plan.truncated, true);
 
   const seen = [];

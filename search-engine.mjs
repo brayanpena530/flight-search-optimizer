@@ -390,6 +390,9 @@ function buildItinerary(outbound, inbound, searchState, diagnostics) {
   const returnOptions = segmentPairs.filter((option) => option.direction === "return");
   const itineraryOptions = [];
 
+  const bundledCashOption = buildBundledRoundTripCashOption(outbound, inbound, searchState);
+  if (bundledCashOption) itineraryOptions.push(bundledCashOption);
+
   for (const outboundOption of outboundOptions) {
     for (const returnOption of returnOptions) {
       const combinedUsage = combineUsage(outboundOption, returnOption);
@@ -455,15 +458,48 @@ function buildItinerary(outbound, inbound, searchState, diagnostics) {
     usage: bestPayment.usage,
     balanceImpact: buildBalanceImpact(searchState.balances, bestPayment.usage),
     label: bestPayment.label,
-    paymentBreakdown: [
-      summarizePaymentOption(bestPayment.outboundOption),
-      summarizePaymentOption(bestPayment.returnOption),
-    ],
+    paymentBreakdown: [bestPayment.outboundOption, bestPayment.returnOption]
+      .filter(Boolean)
+      .map(summarizePaymentOption),
     valueBreakdown,
     explanation: buildExplanation(bestPayment, departurePenalty, returnPenalty, searchState.timePreferenceMode),
   };
   itinerary.qualityPenalty = roundCurrency(qualityPenalty(itinerary));
   return itinerary;
+}
+
+function buildBundledRoundTripCashOption(outbound, inbound, searchState) {
+  if (!outbound.roundTripBundleId || outbound.roundTripBundleId !== inbound.roundTripBundleId) return null;
+  const bundlePrice = getReferenceCashPrice(outbound, getPassengerCount(searchState));
+  if (bundlePrice === null) return null;
+  const caveats = [...new Set([
+    ...(outbound.providerCaveats ?? []),
+    ...(inbound.providerCaveats ?? []),
+  ])];
+  return {
+    label: "Round-trip cash",
+    cashOutlay: bundlePrice,
+    effectiveCost: bundlePrice,
+    pointsUsed: 0,
+    centsPerPoint: null,
+    caveats,
+    usage: {},
+    outboundOption: {
+      direction: "outbound",
+      label: "Round-trip cash",
+      program: "cash",
+      redemptionType: null,
+      cashOutlay: bundlePrice,
+      referenceCashPrice: bundlePrice,
+      pointOpportunityCost: 0,
+      cashSavings: 0,
+      effectiveCost: bundlePrice,
+      pointsUsed: 0,
+      awardMiles: 0,
+      usage: {},
+    },
+    returnOption: null,
+  };
 }
 
 function buildBalanceImpact(balances, usage) {

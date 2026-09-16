@@ -12,7 +12,7 @@ const CASH_PRICE_CAVEAT =
 export const SERPAPI_CAPABILITIES = Object.freeze({
   cashSearchSupported: true,
   bookingOptionsOnDemand: true,
-  departureTokenFollowUp: false,
+  departureTokenFollowUp: true,
   cacheAllowedByDefault: true,
 });
 
@@ -46,6 +46,10 @@ export function buildSerpApiParams({
     params.set("booking_token", String(bookingToken));
   } else if (departureToken) {
     params.set("departure_token", String(departureToken));
+    if (origin) params.set("departure_id", normalizeAirportList(origin));
+    if (destination) params.set("arrival_id", normalizeAirportList(destination));
+    if (outboundDate) params.set("outbound_date", normalizeDate(outboundDate));
+    if (returnDate) params.set("return_date", normalizeDate(returnDate));
   } else {
     params.set("departure_id", normalizeAirportList(origin));
     params.set("arrival_id", normalizeAirportList(destination));
@@ -89,10 +93,15 @@ export function buildSerpApiSearchRequests({
   adults = 1,
   requestBudget = DEFAULT_MAX_REQUESTS,
   maxDatesPerDirection,
+  nearbyAirportMaxGroundTravelMinutes = Infinity,
   ...options
 }) {
   const budget = normalizePositiveInteger(requestBudget, DEFAULT_MAX_REQUESTS);
-  const directionBudget = tripType === "one-way" ? budget : Math.floor(budget / 2) || 1;
+  const nativeRoundTripBudget = tripType === "one-way" ? 0 : 1;
+  const departureTokenBudget = tripType === "one-way" ? 0 : budget >= 6 ? 2 : 1;
+  const directionBudget = tripType === "one-way"
+    ? budget
+    : Math.max(1, Math.floor(Math.max(0, budget - nativeRoundTripBudget - departureTokenBudget) / 2));
   const perDirection = Math.max(
     1,
     Math.min(
@@ -107,12 +116,24 @@ export function buildSerpApiSearchRequests({
   const outboundDates = selectBoundedDates(outboundWindowDates, perDirection);
   const returnDates = selectBoundedDates(returnWindowDates, perDirection);
   const originIds = useNearbyAirports
-    ? expandAirports(String(origin ?? "").toUpperCase(), true).join(",")
+    ? expandAirports(String(origin ?? "").toUpperCase(), true, nearbyAirportMaxGroundTravelMinutes).join(",")
     : String(origin ?? "");
   const destinationIds = useNearbyAirports
-    ? expandAirports(String(destination ?? "").toUpperCase(), true).join(",")
+    ? expandAirports(String(destination ?? "").toUpperCase(), true, nearbyAirportMaxGroundTravelMinutes).join(",")
     : String(destination ?? "");
   const allRequests = [
+    ...(tripType === "one-way" ? [] : outboundDates.slice(0, nativeRoundTripBudget).map((date, index) => ({
+      direction: "round-trip",
+      nativeRoundTrip: true,
+      origin: originIds,
+      destination: destinationIds,
+      outboundDate: date,
+      returnDate: returnDates[index] ?? returnDates[0],
+      cabin,
+      maxStops,
+      adults,
+      ...options,
+    }))),
     ...outboundDates.map((date) => ({
       direction: "outbound",
       origin: originIds,
@@ -139,10 +160,11 @@ export function buildSerpApiSearchRequests({
 
   const requests = tripType === "one-way" ? allRequests.slice(0, budget) : allRequests.slice(0, budget);
   return {
-    requests,
+    requests: requests.slice(0, budget - departureTokenBudget),
     requestedCount: allRequests.length,
     budget,
-    truncated: allRequests.length > budget || outboundWindowDates.length > outboundDates.length || returnWindowDates.length > returnDates.length,
+    departureTokenBudget,
+    truncated: allRequests.length > budget - departureTokenBudget || outboundWindowDates.length > outboundDates.length || returnWindowDates.length > returnDates.length,
   };
 }
 
@@ -181,9 +203,10 @@ export async function querySerpApiGoogleFlights(options = {}) {
     maxStops: searchState.maxStops,
     adults: searchState.passengers?.adults ?? 1,
     requestBudget,
+    nearbyAirportMaxGroundTravelMinutes: searchState.nearbyAirportMaxGroundTravelMinutes,
     noCache,
   });
-  const results = await Promise.all(
+  const initialResults = await Promise.all(
     plan.requests.map((request) =>
       fetchSerpApiResult({
         fetchImpl,
@@ -195,20 +218,57 @@ export async function querySerpApiGoogleFlights(options = {}) {
       })
     )
   );
+  const tokenWork = initialResults
+    .map((result, index) => ({ result, request: plan.requests[index] }))
+    .filter(({ result, request }) => request.nativeRoundTrip && result.ok)
+    .flatMap(({ result, request }) => result.segments
+      .map((segment) => ({ segment, token: segment.providerEvidence?.[0]?.departureToken, origin: request.origin, destination: request.destination, outboundDate: request.outboundDate, returnDate: request.returnDate }))
+      .filter(({ token }) => token)
+      .slice(0, plan.departureTokenBudget));
+  const tokenResults = await Promise.all(tokenWork.map(({ token, origin, destination, outboundDate, returnDate }) => fetchSerpApiResult({
+    fetchImpl,
+    baseUrl,
+    apiKey,
+    timeoutMs,
+    retrievedAt,
+    request: { departureToken: token, origin, destination, outboundDate, returnDate, direction: "return" },
+  })));
+  const results = [...initialResults, ...tokenResults];
   const successes = results.filter((result) => result.ok);
-  const segments = dedupeSegments(successes.flatMap((result) => result.segments));
+  const pairedOutboundSignatures = new Set(
+    tokenWork
+      .filter((_, index) => tokenResults[index]?.segments?.some((segment) => Number.isFinite(segment.cashPrice)))
+      .map(({ segment }) => segmentSignature(segment))
+  );
+  const roundTripSegments = tokenWork.flatMap(({ segment: outbound }, index) => {
+    const inbound = tokenResults[index]?.segments?.[0];
+    if (!inbound || !Number.isFinite(inbound.cashPrice)) return [];
+    const bundleId = `${outbound.origin}-${outbound.destination}-${outbound.departure}-${inbound.departure}`;
+    return [
+      { ...outbound, cashPrice: inbound.cashPrice, roundTripBundleId: bundleId, roundTripBundlePrice: inbound.cashPrice },
+      { ...inbound, direction: "round-trip-return", cashPrice: null, roundTripBundleId: bundleId, roundTripBundlePrice: inbound.cashPrice },
+    ];
+  });
+  const segments = dedupeSegments([
+    ...initialResults.flatMap((result, index) => plan.requests[index]?.nativeRoundTrip
+      ? (result.segments ?? []).filter((segment) => !pairedOutboundSignatures.has(segmentSignature(segment)))
+      : (result.segments ?? [])),
+    ...roundTripSegments,
+  ]);
   const failures = results.filter((result) => !result.ok).map((result) => result.reason);
   const notes = [];
 
+  const totalRequestCount = plan.requests.length + tokenWork.length;
   if (plan.truncated) {
     notes.push(
-      `SerpApi cash search used ${plan.requests.length} of its ${plan.budget}-request budget; widen coverage with SERPAPI_MAX_REQUESTS_PER_SEARCH or narrow the date window.`
+      `SerpApi cash search used ${totalRequestCount} of its ${plan.budget}-request budget; widen coverage with SERPAPI_MAX_REQUESTS_PER_SEARCH or narrow the date window.`
     );
   } else {
-    notes.push(`SerpApi cash search used ${plan.requests.length} request(s) within its ${plan.budget}-request budget.`);
+    notes.push(`SerpApi cash search used ${totalRequestCount} request(s) within its ${plan.budget}-request budget.`);
   }
   if (failures.length > 0) {
     notes.push(`${failures.length} SerpApi request(s) failed and were skipped.`);
+    notes.push(`SerpApi failure details: ${failures.slice(0, 2).join("; ")}`);
   }
   if (segments.length === 0) {
     return {
@@ -218,7 +278,7 @@ export async function querySerpApiGoogleFlights(options = {}) {
       reason: failures.length > 0
         ? `SerpApi returned no usable cash fares. ${failures.slice(0, 2).join("; ")}`
         : "SerpApi returned no cash fares for the bounded date windows.",
-      requestCount: plan.requests.length,
+      requestCount: plan.requests.length + tokenWork.length,
     };
   }
 
@@ -229,9 +289,13 @@ export async function querySerpApiGoogleFlights(options = {}) {
     capabilities: SERPAPI_CAPABILITIES,
     segments,
     notes,
-    requestCount: plan.requests.length,
+    requestCount: plan.requests.length + tokenWork.length,
     partial: failures.length > 0,
   };
+}
+
+function segmentSignature(segment) {
+  return [segment.origin, segment.destination, segment.departure, segment.arrival, segment.airline].join("|");
 }
 
 export async function querySerpApiBookingOptions(options = {}) {
@@ -338,7 +402,14 @@ async function fetchSerpApiResult({
     return { ok: false, reason: `SerpApi request failed: ${error.message}` };
   }
   if (!response?.ok) {
-    return { ok: false, reason: `SerpApi request failed with HTTP ${response?.status ?? "unknown"}.` };
+    let detail = "";
+    try {
+      const body = await response?.text?.();
+      detail = body ? ` ${String(body).slice(0, 240)}` : "";
+    } catch {
+      // Preserve the HTTP failure when the provider does not expose a readable body.
+    }
+    return { ok: false, reason: `SerpApi request failed with HTTP ${response?.status ?? "unknown"}.${detail}` };
   }
 
   let payload;

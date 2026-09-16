@@ -63,6 +63,12 @@ test("MCP starts a search, polls it, and returns compact candidates", async () =
   const payload = results.result.structuredContent;
   assert.equal(payload.status, "complete");
   assert.ok(Array.isArray(payload.candidates));
+  if (payload.candidates.length > 0) {
+    assert.ok(payload.candidates[0].flightDetails.outbound);
+    assert.ok(payload.candidates[0].flightDetails.outbound.airline);
+    assert.ok(Array.isArray(payload.candidates[0].flightDetails.outbound.flights));
+    assert.ok(payload.candidates[0].flightDetails.return);
+  }
   assert.ok(Buffer.byteLength(results.result.content[0].text, "utf8") <= 6 * 1024);
   assert.equal(Object.hasOwn(payload, "segments"), false);
 });
@@ -176,6 +182,9 @@ test("MCP option details expose SerpApi cache evidence, Google Flights links, an
     searchResults.result.structuredContent.candidates[0].searchLinks[0].url,
     "https://www.google.com/travel/flights?q=IAH%20to%20JFK"
   );
+  assert.equal(searchResults.result.structuredContent.candidates[0].flightDetails.outbound.airline, "United");
+  assert.equal(searchResults.result.structuredContent.candidates[0].flightDetails.outbound.origin, "IAH");
+  assert.equal(searchResults.result.structuredContent.candidates[0].flightDetails.return.destination, "IAH");
   assert.equal(Object.hasOwn(searchResults.result.structuredContent.candidates[0], "bookingToken"), false);
   let bookingCalls = 0;
   const details = await handleMcpRequest({

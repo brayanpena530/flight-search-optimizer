@@ -100,6 +100,8 @@ function mergeSegmentsForSearch(cashSegments, awardSegments) {
 
     mergedByKey.set(key, {
       ...existing,
+      roundTripBundleId: existing.roundTripBundleId ?? segment.roundTripBundleId,
+      roundTripBundlePrice: existing.roundTripBundlePrice ?? segment.roundTripBundlePrice,
       cashAvailable: Boolean(existing.cashAvailable || segment.cashAvailable),
       awardOptions: dedupeAwardOptions([
         ...existing.awardOptions,

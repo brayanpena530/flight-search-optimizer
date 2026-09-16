@@ -45,6 +45,10 @@ test("CLI validates JSON input and returns a compact ranked packet", async () =>
   assert.equal(output.outcome.status, "candidates-found");
   assert.equal(output.candidates[0].caveats.includes(output.candidates[0].explanation), false);
   assert.ok(output.candidates[0].payment.label);
+  assert.ok(output.candidates[0].flightDetails.outbound);
+  assert.ok(output.candidates[0].flightDetails.outbound.airline);
+  assert.ok(Array.isArray(output.candidates[0].flightDetails.outbound.flights));
+  assert.ok(output.candidates[0].flightDetails.return);
   assert.equal(output.candidates[0].payment.breakdown.length, 2);
   assert.ok(output.candidates[0].travelMetrics.outbound);
   assert.ok(output.candidates[0].travelMetrics.return);

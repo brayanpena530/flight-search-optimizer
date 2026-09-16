@@ -58,7 +58,7 @@ Run the adapter with:
 npm.cmd run mcp
 ```
 
-It exposes `start_flight_search`, `get_search_results`, `get_option_details`, `compare_options`, `recheck_option`, and `get_traveler_profile`. Search snapshots are kept in memory for 30 minutes. SerpApi booking options are looked up only when a finalist is inspected or rechecked; initial searches do not fan out through booking tokens or `departure_token` continuations.
+It exposes `start_flight_search`, `get_search_results`, `get_option_details`, `compare_options`, `recheck_option`, and `get_traveler_profile`. Search snapshots are kept in memory for 30 minutes. SerpApi booking options are looked up only when a finalist is inspected or rechecked. Round-trip searches now reserve bounded requests for SerpApi’s native round-trip search and `departure_token` return-leg follow-up, while retaining separate one-way searches for split-ticket comparisons.
 
 ## Provider status and credentials
 
@@ -75,7 +75,7 @@ Active provider settings:
 - `PROVIDER_TIMEOUT_MS`: overall provider request timeout; default `20000`.
 - `SERPAPI_GOOGLE_FLIGHTS`: SerpApi key. `SERPAPI_API_KEY`, `SERPAPI_KEY`, and `SERP_API_KEY` are accepted aliases.
 - `SERPAPI_BASE_URL`: defaults to `https://serpapi.com/search`.
-- `SERPAPI_MAX_REQUESTS_PER_SEARCH`: bounds SerpApi requests; default `6`.
+- `SERPAPI_MAX_REQUESTS_PER_SEARCH`: bounds SerpApi initial and departure-token follow-up requests; default `6`. Round-trip searches reserve capacity for native bundled-fare discovery and use the remaining budget for separate one-way comparisons.
 - `SERPAPI_TIMEOUT_MS`: per-request timeout; default `20000`.
 - `SERPAPI_NO_CACHE`: defaults to `false`; set to `true` only when an intentional fresh fetch is worth the additional paid request.
 - `SEATS_AERO_API_KEY`: enables cached award searches.
@@ -109,7 +109,7 @@ Airport access times are approximate planning metadata. Ground cost does not rep
 
 ## Data and result caveats
 
-- SerpApi results can be cache-eligible and must be rechecked with the seller before booking.
+- SerpApi results can be cache-eligible and must be rechecked with the seller before booking. Native round-trip fares are identified as `Round-trip cash`; independently paired legs remain labeled as separate one-way or same-airline pairings.
 - Seats.aero results are cached discoveries. Confirm award availability, mileage price, and taxes with the airline before transferring points.
 - If SerpApi or Seats.aero returns no usable results, the app returns an explicit warning and does not substitute local sample inventory.
 - Award listings without a reference cash fare can still rank, but cpp and cash savings are shown as unknown.

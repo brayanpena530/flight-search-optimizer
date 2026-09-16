@@ -40,12 +40,16 @@ Houston<->NYC (Aug 2026); other routes return zero candidates.
 
 ## Reading the result
 
-**Do not rely on the process exit code - it is always 0.** Branch on the JSON
-instead:
+Branch on the JSON result (the CLI uses exit code 0 for candidates, 1 for a
+valid search with no candidates, and 2 for invalid input or an unknown
+command):
 
 - `ok: false` with `code` (`VALIDATION_ERROR`, `INPUT_ERROR`, `UNKNOWN_COMMAND`)
   -> bad request. `errors[]` names each problem; fix and rerun.
-- `outcome.status: "candidates-found"` -> report `candidates[]`, best first.
+- `outcome.status: "candidates-found"` -> report several distinct options
+  from `candidates[]`, in ranked order; do not report only `candidates[0]`.
+  Return up to five options when available, or all available options when
+  fewer than five were found.
 - `outcome.status: "no-candidates"` -> this is a normal result, not a crash.
   Read `outcome.reasonCodes` and `diagnosticSummary` to say why, then relay
   `recommendations[]`. Common causes: route absent from inventory
@@ -54,10 +58,18 @@ instead:
   (`PAYMENT_RULES_REJECTED`).
 
 Each candidate carries `optionId`, `route`, `dates`, `effectiveCost`,
-`durationMinutes`, and a `payment` block with `method` (`cash`,
+`durationMinutes`, a `flightDetails` block, and a `payment` block with `method` (`cash`,
 `airline-miles`, `points-transfer`, `card-travel`, or `mixed`), `cashOutlay`,
 `pointsUsed`, `centsPerPoint`, and a per-leg `breakdown`. Lead with
 `effectiveCost` and `payment.method`; that pair is the actual recommendation.
+
+For every option you report, include the airline, flight number(s), outbound
+and return airports, local departure and arrival times, stops, and duration
+from `flightDetails.outbound` and `flightDetails.return`. Also include the
+cash price or points cost and the important caveats. The `flightDetails.*.flights`
+array contains segment-level details for connections. The default search limit
+is five; pass `--limit 5` explicitly when calling the CLI so the response has
+enough alternatives for comparison.
 
 Also surface, when non-empty:
 
@@ -70,9 +82,10 @@ Also surface, when non-empty:
 - `insights.bestByDepartureDate` / `bestByStayLength` - the tradeoff tables for
   flexible-date questions.
 
-Add `--full` only when provider evidence or normalized segments are actually
-needed; the compact packet is large already. Use `--pretty` for human reading;
-the default is compact for machine parsing.
+Add `--full` only when provider evidence, booking tokens/links, or additional
+normalized segment fields are actually needed; compact results already include
+the flight details needed to compare options. Use `--pretty` for human
+reading; the default is compact for machine parsing.
 
 ## Request JSON shape
 
@@ -120,9 +133,12 @@ traveler, used for effective-cost math.
 
 ## Before promising anything
 
-Run `node cli.mjs health` when results look thin. If Amadeus and SerpApi are
-both `missing-credentials`, cash fares are coming from sample data and the
-ranking is not real. Say so plainly rather than presenting a number.
+Run `node cli.mjs health` when results look thin. With `official-first`, live
+cash results require SerpApi credentials and award results use the configured
+Seats.aero cache; the app does not silently substitute local sample flights
+when an official provider fails. A sample result is available only when the
+request explicitly uses `dataStrategy: "sample-only"`. Say this plainly rather
+than presenting a sample-backed number as a live fare.
 
 No result from this tool is a booking. Price and availability must be confirmed
 with the seller, and cached award space must be confirmed with the airline at
