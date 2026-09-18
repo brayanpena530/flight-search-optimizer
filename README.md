@@ -10,6 +10,7 @@ Local planning app for comparing cash fares, airline miles, and transferable-car
 - Supports one-way and round-trip searches, flexible date windows, stay-length limits, passenger counts, cabin and stop filters, and soft or hard time-of-day preferences.
 - Expands nearby airports across curated metro groups and applies configurable estimated ground-travel time and cost.
 - Returns ranked candidates, highlighted winners, payment breakdowns, provider provenance, diagnostics, caveats, recommendations, and recheck links.
+- Requests one carry-on per traveler by default. SerpApi cash searches use its `bags` parameter; provider-reported baggage wins over the versioned airline/fare fallback in `baggage-policy.mjs`. Known unbundled carry-on costs are added to cash outlay and effective cost.
 - Refreshes official Amex and Chase transfer-partner data when the local cache is older than seven days. Failed refreshes preserve the last known cache and return a warning.
 - Provides a browser UI, CLI, and newline-delimited JSON MCP adapter over the same optimizer service.
 
@@ -47,6 +48,8 @@ When `--nearby` is enabled:
 - `--nearby-airport-ground-cost-per-hour` adds estimated ground cost to effective-cost ranking. The default is `$20/hour`.
 
 The JSON request equivalents are `nearbyAirportMaxGroundTravelMinutes` and `nearbyAirportGroundCostPerHour`.
+
+Carry-on behavior is controlled by `carryOnBagsPerTraveler` (`0` or `1`, default `1`) and `carryOnFallbackFeeDollars` (default `$60` per traveler per leg). Candidate output includes a structured `carryOn` assessment with its status, confidence, source, fare family, rule version, per-leg details, and estimated cost. `unknown` means the optimizer could not safely determine the allowance and it must be verified before booking.
 
 The compact and full output contracts both return stable `option_N` identifiers. Full output adds normalized itinerary details and provider evidence under `details`.
 
@@ -110,6 +113,8 @@ Airport access times are approximate planning metadata. Ground cost does not rep
 ## Data and result caveats
 
 - SerpApi results can be cache-eligible and must be rechecked with the seller before booking. Native round-trip fares are identified as `Round-trip cash`; independently paired legs remain labeled as separate one-way or same-airline pairings.
+- SerpApi can return exact `baggage_prices` during booking-option lookup and can price searches with requested carry-ons. Seats.aero documents cabin and fare class but not baggage allowance, so award results use the versioned airline fallback and expose that inference rather than claiming provider confirmation.
+- The fallback table currently covers American, Alaska, Delta, Frontier, JetBlue, Southwest, and United. Airline policies, routes, elite status, credit cards, codeshares, and fare bundles can change the actual allowance; the seller remains authoritative.
 - Seats.aero results are cached discoveries. Confirm award availability, mileage price, and taxes with the airline before transferring points.
 - If SerpApi or Seats.aero returns no usable results, the app returns an explicit warning and does not substitute local sample inventory.
 - Award listings without a reference cash fare can still rank, but cpp and cash savings are shown as unknown.

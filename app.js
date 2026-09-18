@@ -194,6 +194,8 @@ function readForm(formData) {
     timePreferenceMode: formData.get("timePreferenceMode"),
     timePreferencePenaltyDollars: Number(formData.get("timePreferencePenaltyDollars")),
     cabinPreference: formData.get("cabinPreference"),
+    carryOnBagsPerTraveler: Number(formData.get("carryOnBagsPerTraveler")),
+    carryOnFallbackFeeDollars: Number(formData.get("carryOnFallbackFeeDollars")),
     maxStops: Number(formData.get("maxStops")),
     rankingFocus: formData.get("rankingFocus"),
     dataStrategy: formData.get("dataStrategy"),
@@ -527,6 +529,7 @@ function renderResults(rankedOptions, searchState = null, providerResult = null)
           </div>
           ${option.riskFlags?.length ? `<div class="caveat-line risk-line">${option.riskFlags.map(formatRiskFlag).join(" ")}</div>` : ""}
           ${renderTicketingMetadata(option.ticketing)}
+          ${renderCarryOn(option.carryOn)}
           ${renderLegMetrics(option.travelMetrics)}
           <div class="result-meta source-line">
             <span>${formatSegmentSource(option.outbound, "Outbound")}</span>
@@ -647,6 +650,7 @@ function renderValueBreakdown(valueBreakdown) {
       <span>Point value cost ${formatCurrency(valueBreakdown.pointOpportunityCost)}</span>
       <span>Time preference penalty ${formatCurrency(valueBreakdown.timePreferencePenalty)}</span>
       <span>Nearby-airport ground cost ${formatCurrency(valueBreakdown.groundTravelCost ?? 0)}</span>
+      <span>Estimated carry-on cost ${formatCurrency(valueBreakdown.carryOnCost ?? 0)}</span>
       <span>Formula total ${formatCurrency(valueBreakdown.effectiveCost)}</span>
     </div>
   `;
@@ -884,6 +888,8 @@ function formatRiskFlag(flag) {
     "change-rules-may-differ": "Change rules may differ",
     "missed-connection-not-protected": "Missed connection not protected",
     "reservation-not-confirmed": "Reservation not confirmed",
+    "carry-on-fee-required": "Carry-on costs extra",
+    "carry-on-unknown": "Carry-on allowance unknown",
   };
   return `<span>${labels[flag] ?? flag}</span>`;
 }
@@ -898,6 +904,20 @@ function renderTicketingMetadata(ticketing) {
     `Changes: ${ticketing.changeRules}`,
   ];
   return `<div class="ticketing-line">${details.map((detail) => `<span>${escapeHtml(detail)}</span>`).join("")}</div>`;
+}
+
+function renderCarryOn(carryOn) {
+  if (!carryOn || carryOn.status === "not-requested") return "";
+  const labels = {
+    included: "Carry-on included",
+    "fee-required": carryOn.priceIncludesRequestedCarryOn ? "Carry-on fee reflected in search price" : "Carry-on costs extra",
+    unknown: "Carry-on allowance needs verification",
+  };
+  const details = (carryOn.legs ?? []).map(({ direction, allowance }) => {
+    const source = allowance.confidence === "confirmed" ? "provider" : allowance.source === "airline-rule" ? "airline rule" : "unverified";
+    return `${capitalize(direction ?? "leg")}: ${allowance.fareFamily} fare, ${allowance.status} (${source})`;
+  });
+  return `<div class="ticketing-line"><span>${labels[carryOn.status] ?? carryOn.status}</span>${details.map((detail) => `<span>${escapeHtml(detail)}</span>`).join("")}</div>`;
 }
 
 function renderLegMetrics(metrics) {

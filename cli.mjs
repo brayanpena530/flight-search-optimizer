@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { buildProviderHealth, resolveSearch } from "./server.mjs";
 import { normalizeAndValidateSearchState } from "./search-state.mjs";
 
-const VERSION = "1.0";
+const VERSION = "1.1";
 
 if (isMainModule()) {
   runCli(process.argv.slice(2)).catch((error) => {
@@ -77,6 +77,7 @@ function buildCompactResult(result, searchState, requestedLimit) {
       return: searchState.tripType === "one-way" ? null : [searchState.earliestReturn, searchState.latestReturn],
       passengers: searchState.passengers.adults,
       cabin: searchState.cabinPreference,
+      carryOnBagsPerTraveler: searchState.carryOnBagsPerTraveler,
       rankingFocus: searchState.rankingFocus,
       nearbyAirportMaxGroundTravelMinutes: searchState.nearbyAirportMaxGroundTravelMinutes,
       nearbyAirportGroundCostPerHour: searchState.nearbyAirportGroundCostPerHour,
@@ -148,6 +149,7 @@ function summarizeItinerary(itinerary, index) {
     airportAccess: itinerary.airportAccess ?? null,
     groundTravelCost: itinerary.valueBreakdown?.groundTravelCost ?? 0,
     riskFlags: itinerary.riskFlags ?? [],
+    carryOn: summarizeCarryOn(itinerary.carryOn),
     qualityPenalty: itinerary.qualityPenalty ?? null,
     verification: findVerification(itinerary),
     explanation: itinerary.explanation ?? null,
@@ -179,6 +181,26 @@ function summarizeFlightLeg(segment) {
     durationMinutes: segment.durationMinutes ?? null,
     flightNumbers: flights.map((flight) => flight.flightNumber).filter(Boolean),
     flights,
+  };
+}
+
+function summarizeCarryOn(carryOn) {
+  if (!carryOn) return null;
+  return {
+    status: carryOn.status,
+    requestedPerTraveler: carryOn.requestedPerTraveler,
+    estimatedTotalCost: carryOn.estimatedTotalCost,
+    priceIncludesRequestedCarryOn: carryOn.priceIncludesRequestedCarryOn,
+    legs: (carryOn.legs ?? []).map(({ direction, allowance }) => ({
+      direction,
+      status: allowance.status,
+      fareFamily: allowance.fareFamily,
+      airline: allowance.airline,
+      confidence: allowance.confidence,
+      source: allowance.source,
+      priceIncludesRequestedCarryOn: allowance.priceIncludesRequestedCarryOn,
+      rulesVersion: allowance.rulesVersion,
+    })),
   };
 }
 

@@ -7,7 +7,7 @@ import { resolveSearch } from "./server.mjs";
 import { normalizeAndValidateSearchState } from "./search-state.mjs";
 
 const PROTOCOL_VERSION = "2025-06-18";
-const SCHEMA_VERSION = "1.0";
+const SCHEMA_VERSION = "1.1";
 const SEARCH_TTL_MS = 30 * 60 * 1000;
 const MAX_SEARCH_BYTES = 6 * 1024;
 const MAX_DETAIL_BYTES = 12 * 1024;
@@ -276,6 +276,7 @@ function summarizeCandidate(itinerary, index) {
     effectiveCost: { currency: "USD", amount: itinerary.effectiveCost ?? null },
     durationMinutes: itinerary.totalDurationMinutes ?? itinerary.durationMinutes ?? null,
     travelMetrics: itinerary.travelMetrics ?? null,
+    carryOn: summarizeCarryOn(itinerary.carryOn),
     riskFlags: itinerary.riskFlags ?? [],
     searchLinks: links.searchLinks,
     bookingLinks: links.bookingLinks,
@@ -311,6 +312,26 @@ function summarizeFlightLeg(segment) {
     durationMinutes: segment.durationMinutes ?? null,
     flightNumbers: flights.map((flight) => flight.flightNumber).filter(Boolean),
     flights,
+  };
+}
+
+function summarizeCarryOn(carryOn) {
+  if (!carryOn) return null;
+  return {
+    status: carryOn.status,
+    requestedPerTraveler: carryOn.requestedPerTraveler,
+    estimatedTotalCost: carryOn.estimatedTotalCost,
+    priceIncludesRequestedCarryOn: carryOn.priceIncludesRequestedCarryOn,
+    legs: (carryOn.legs ?? []).map(({ direction, allowance }) => ({
+      direction,
+      status: allowance.status,
+      fareFamily: allowance.fareFamily,
+      airline: allowance.airline,
+      confidence: allowance.confidence,
+      source: allowance.source,
+      priceIncludesRequestedCarryOn: allowance.priceIncludesRequestedCarryOn,
+      rulesVersion: allowance.rulesVersion,
+    })),
   };
 }
 
@@ -418,6 +439,7 @@ function buildAssumptions(searchState) {
   return [
     `${searchState.passengers.adults} adult traveler${searchState.passengers.adults === 1 ? "" : "s"}`,
     `${searchState.cabinPreference} cabin`,
+    `${searchState.carryOnBagsPerTraveler} carry-on bag${searchState.carryOnBagsPerTraveler === 1 ? "" : "s"} per traveler`,
     searchState.useNearbyAirports ? "nearby airports enabled" : "exact airports only",
     `ranking focus: ${searchState.rankingFocus}`,
   ];

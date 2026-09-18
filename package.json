@@ -7,6 +7,6 @@
     "cli": "node cli.mjs",
     "mcp": "node mcp-server.mjs",
     "test": "node --test",
-    "check": "node --check cli.mjs && node --check server.mjs && node --check optimizer-service.mjs && node --check mcp-server.mjs && node --check search-engine.mjs && node --check search-state.mjs && node --check transfer-partner-cache.mjs && node --check cash-providers/serpapi-google-flights.mjs"
+    "check": "node --check cli.mjs && node --check server.mjs && node --check optimizer-service.mjs && node --check mcp-server.mjs && node --check search-engine.mjs && node --check search-state.mjs && node --check baggage-policy.mjs && node --check transfer-partner-cache.mjs && node --check cash-providers/serpapi-google-flights.mjs"
   }
 }

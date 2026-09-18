@@ -6,6 +6,11 @@ import {
   getAirportAccess,
   formatAirlineProgramName,
 } from "./search-config.mjs";
+import {
+  carryOnCaveats,
+  carryOnCostForSegment,
+  resolveCarryOnAllowance,
+} from "./baggage-policy.mjs";
 
 const TRANSFER_CONFIRMATION_CAVEAT =
   "Confirm the award is still available at the same mileage price and taxes before transferring points.";
@@ -151,7 +156,8 @@ function buildOneWayItinerary(outbound, searchState, diagnostics) {
     totalDurationMinutes: outbound.durationMinutes,
     travelMetrics: buildItineraryTravelMetrics(outbound, null),
     airportAccess,
-    riskFlags: buildItineraryRiskFlags(outbound, null, ticketing),
+    riskFlags: [...buildItineraryRiskFlags(outbound, null, ticketing), ...buildCarryOnRiskFlags(payment)],
+    carryOn: summarizeCarryOnForPayment(payment),
     qualityPenalty: null,
     stayNights: null,
     cashOutlay: bestPayment.cashOutlay,
@@ -413,6 +419,7 @@ function buildItinerary(outbound, inbound, searchState, diagnostics) {
         usage: combinedUsage,
         outboundOption,
         returnOption,
+        carryOnCost: roundCurrency((outboundOption.carryOnCost ?? 0) + (returnOption.carryOnCost ?? 0)),
       });
     }
   }
@@ -447,7 +454,8 @@ function buildItinerary(outbound, inbound, searchState, diagnostics) {
     totalDurationMinutes: outbound.durationMinutes + inbound.durationMinutes,
     travelMetrics: buildItineraryTravelMetrics(outbound, inbound),
     airportAccess,
-    riskFlags: buildItineraryRiskFlags(outbound, inbound, ticketing),
+    riskFlags: [...buildItineraryRiskFlags(outbound, inbound, ticketing), ...buildCarryOnRiskFlags(bestPayment)],
+    carryOn: summarizeCarryOnForPayment(bestPayment),
     qualityPenalty: null,
     stayNights: getStayNights(outbound.departure, inbound.departure),
     cashOutlay: bestPayment.cashOutlay,
@@ -472,14 +480,23 @@ function buildBundledRoundTripCashOption(outbound, inbound, searchState) {
   if (!outbound.roundTripBundleId || outbound.roundTripBundleId !== inbound.roundTripBundleId) return null;
   const bundlePrice = getReferenceCashPrice(outbound, getPassengerCount(searchState));
   if (bundlePrice === null) return null;
+  const passengerCount = getPassengerCount(searchState);
+  const outboundCarryOn = resolveCarryOnAllowance(outbound, carryOnContext(searchState, "cash"));
+  const inboundCarryOn = resolveCarryOnAllowance(inbound, carryOnContext(searchState, "cash"));
+  const carryOnCost = roundCurrency(
+    carryOnCostForSegment(outboundCarryOn, passengerCount) + carryOnCostForSegment(inboundCarryOn, passengerCount)
+  );
+  const totalPrice = roundCurrency(bundlePrice + carryOnCost);
   const caveats = [...new Set([
     ...(outbound.providerCaveats ?? []),
     ...(inbound.providerCaveats ?? []),
+    ...carryOnCaveats(outboundCarryOn),
+    ...carryOnCaveats(inboundCarryOn),
   ])];
   return {
     label: "Round-trip cash",
-    cashOutlay: bundlePrice,
-    effectiveCost: bundlePrice,
+    cashOutlay: totalPrice,
+    effectiveCost: totalPrice,
     pointsUsed: 0,
     centsPerPoint: null,
     caveats,
@@ -489,16 +506,23 @@ function buildBundledRoundTripCashOption(outbound, inbound, searchState) {
       label: "Round-trip cash",
       program: "cash",
       redemptionType: null,
-      cashOutlay: bundlePrice,
-      referenceCashPrice: bundlePrice,
+      cashOutlay: totalPrice,
+      referenceCashPrice: totalPrice,
       pointOpportunityCost: 0,
       cashSavings: 0,
-      effectiveCost: bundlePrice,
+      effectiveCost: totalPrice,
       pointsUsed: 0,
       awardMiles: 0,
       usage: {},
+      carryOn: outboundCarryOn,
+      carryOnLegs: [
+        { direction: "outbound", allowance: outboundCarryOn },
+        { direction: "return", allowance: inboundCarryOn },
+      ],
+      carryOnCost,
     },
     returnOption: null,
+    carryOnCost,
   };
 }
 
@@ -521,7 +545,10 @@ function buildBalanceImpact(balances, usage) {
 function buildSegmentPaymentOptions(segment, searchState, direction, diagnostics) {
   const options = [];
   const passengerCount = getPassengerCount(searchState);
-  const cashPrice = getReferenceCashPrice(segment, passengerCount);
+  const baseCashPrice = getReferenceCashPrice(segment, passengerCount);
+  const cashCarryOn = resolveCarryOnAllowance(segment, carryOnContext(searchState, "cash"));
+  const cashCarryOnCost = carryOnCostForSegment(cashCarryOn, passengerCount);
+  const cashPrice = baseCashPrice === null ? null : roundCurrency(baseCashPrice + cashCarryOnCost);
   if (isCashBookable(segment) && cashPrice !== null) {
     options.push({
       direction,
@@ -534,15 +561,19 @@ function buildSegmentPaymentOptions(segment, searchState, direction, diagnostics
       effectiveCost: cashPrice,
       pointsUsed: 0,
       centsPerPoint: null,
-      caveats: segment.providerCaveats ?? [],
+      caveats: [...(segment.providerCaveats ?? []), ...carryOnCaveats(cashCarryOn)],
       usage: {},
       awardMiles: 0,
+      carryOn: cashCarryOn,
+      carryOnCost: cashCarryOnCost,
     });
     options.push(...buildCardTravelRedemptionOptions({
       cashPrice,
       searchState,
       direction,
-      caveats: segment.providerCaveats ?? [],
+      caveats: [...(segment.providerCaveats ?? []), ...carryOnCaveats(cashCarryOn)],
+      carryOn: cashCarryOn,
+      carryOnCost: cashCarryOnCost,
     }));
   }
 
@@ -551,6 +582,8 @@ function buildSegmentPaymentOptions(segment, searchState, direction, diagnostics
   }
 
   const allowedAwardPrograms = new Set(searchState.awardPrograms ?? []);
+  const awardCarryOn = resolveCarryOnAllowance(segment, carryOnContext(searchState, "award"));
+  const awardCarryOnCost = carryOnCostForSegment(awardCarryOn, passengerCount);
   for (const award of segment.awardOptions) {
     if (!allowedAwardPrograms.has(award.program)) {
       continue;
@@ -561,7 +594,7 @@ function buildSegmentPaymentOptions(segment, searchState, direction, diagnostics
     }
 
     const awardMiles = award.miles * passengerCount;
-    const awardTaxes = roundCurrency(award.taxes * passengerCount);
+    const awardTaxes = roundCurrency(award.taxes * passengerCount + awardCarryOnCost);
     const airlineCpp = calculateValuePerPoint(cashPrice, awardTaxes, awardMiles);
       if (airlineCpp !== null && airlineCpp < searchState.thresholds.airline) {
       if (diagnostics) {
@@ -597,9 +630,11 @@ function buildSegmentPaymentOptions(segment, searchState, direction, diagnostics
         ),
         pointsUsed: awardMiles,
         centsPerPoint: airlineCpp,
-        caveats: [],
+        caveats: carryOnCaveats(awardCarryOn),
         usage: { [award.program]: awardMiles },
         awardMiles,
+        carryOn: awardCarryOn,
+        carryOnCost: awardCarryOnCost,
       });
     } else if (diagnostics) {
       diagnostics.rejectedAirlineBalance += 1;
@@ -680,9 +715,11 @@ function buildSegmentPaymentOptions(segment, searchState, direction, diagnostics
         ),
         pointsUsed: requiredBankPoints,
         centsPerPoint: bankCpp,
-        caveats: [TRANSFER_CONFIRMATION_CAVEAT],
+        caveats: [TRANSFER_CONFIRMATION_CAVEAT, ...carryOnCaveats(awardCarryOn)],
         usage: { [currency]: requiredBankPoints },
         awardMiles,
+        carryOn: awardCarryOn,
+        carryOnCost: awardCarryOnCost,
       });
     }
   }
@@ -694,7 +731,14 @@ function isCashBookable(segment) {
   return segment.cashAvailable !== false;
 }
 
-function buildCardTravelRedemptionOptions({ cashPrice, searchState, direction, caveats = [] }) {
+function buildCardTravelRedemptionOptions({
+  cashPrice,
+  searchState,
+  direction,
+  caveats = [],
+  carryOn = null,
+  carryOnCost = 0,
+}) {
   const options = [];
   for (const currency of ["amex", "chase"]) {
     const redemptionCpp = getCardTravelRedemptionCpp(searchState, currency);
@@ -728,6 +772,8 @@ function buildCardTravelRedemptionOptions({ cashPrice, searchState, direction, c
       caveats,
       usage: { [currency]: pointsUsed },
       awardMiles: 0,
+      carryOn,
+      carryOnCost,
     });
   }
 
@@ -787,6 +833,9 @@ function buildValueBreakdown(payment, timePreferencePenalty, groundTravelCost = 
     paymentEffectiveCost,
     timePreferencePenalty: roundCurrency(timePreferencePenalty),
     groundTravelCost: roundCurrency(groundTravelCost),
+    ...(paymentOptions.some((option) => (option.carryOnCost ?? 0) > 0)
+      ? { carryOnCost: roundCurrency(paymentOptions.reduce((sum, option) => sum + (option.carryOnCost ?? 0), 0)) }
+      : {}),
     effectiveCost: roundCurrency(paymentEffectiveCost + timePreferencePenalty + groundTravelCost),
   };
 }
@@ -909,7 +958,47 @@ function summarizePaymentOption(option) {
     centsPerPoint: option.centsPerPoint,
     transferRatio: option.transferRatio ?? null,
     caveats: option.caveats ?? [],
+    carryOn: option.carryOn ?? null,
+    carryOnCost: option.carryOnCost ?? 0,
   };
+}
+
+function carryOnContext(searchState, bookingType) {
+  return {
+    bookingType,
+    requestedPerTraveler: searchState.carryOnBagsPerTraveler ?? 1,
+    fallbackFeeDollars: searchState.carryOnFallbackFeeDollars ?? 60,
+  };
+}
+
+function summarizeCarryOnForPayment(payment) {
+  const options = [payment.outboundOption, payment.returnOption].filter(Boolean);
+  const legs = options.flatMap((option) => option.carryOnLegs ?? [{
+    direction: option.direction,
+    allowance: option.carryOn,
+  }]).filter((item) => item.allowance);
+  const statuses = legs.map((item) => item.allowance.status);
+  const status = statuses.includes("fee-required")
+    ? "fee-required"
+    : statuses.includes("unknown")
+      ? "unknown"
+      : statuses.every((item) => item === "not-requested")
+        ? "not-requested"
+        : "included";
+  return {
+    status,
+    requestedPerTraveler: legs[0]?.allowance.requestedPerTraveler ?? 0,
+    estimatedTotalCost: roundCurrency(options.reduce((sum, option) => sum + (option.carryOnCost ?? 0), 0)),
+    priceIncludesRequestedCarryOn: legs.length > 0 && legs.every((item) => item.allowance.priceIncludesRequestedCarryOn),
+    legs,
+  };
+}
+
+function buildCarryOnRiskFlags(payment) {
+  const summary = summarizeCarryOnForPayment(payment);
+  if (summary.status === "fee-required") return ["carry-on-fee-required"];
+  if (summary.status === "unknown") return ["carry-on-unknown"];
+  return [];
 }
 
 function getTimePreferencePenaltyDollars(searchState) {

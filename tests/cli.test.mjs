@@ -36,7 +36,7 @@ test("CLI validates JSON input and returns a compact ranked packet", async () =>
   const output = captureResult.read();
 
   assert.equal(exitCode, 0);
-  assert.equal(output.schemaVersion, "1.0");
+  assert.equal(output.schemaVersion, "1.1");
   assert.equal(output.ok, true);
   assert.ok(output.candidates.length > 0);
   assert.ok(output.candidates.length <= 5);

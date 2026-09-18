@@ -30,12 +30,14 @@ test("SerpApi request construction distinguishes one-way and round-trip searches
     adults: 2,
     cabin: "business",
     maxStops: 0,
+    bags: 2,
   });
   assert.equal(oneWay.get("engine"), "google_flights");
   assert.equal(oneWay.get("type"), "2");
   assert.equal(oneWay.get("travel_class"), "3");
   assert.equal(oneWay.get("stops"), "1");
   assert.equal(oneWay.get("adults"), "2");
+  assert.equal(oneWay.get("bags"), "2");
   assert.equal(oneWay.has("return_date"), false);
   assert.equal(oneWay.has("no_cache"), false);
 
@@ -118,6 +120,7 @@ test("SerpApi response mapping preserves normalized segments and bounded provide
   assert.equal(segment.flightSegments[0].flightNumber, "UA 100");
   assert.equal(segment.providerEvidence[0].bookingToken, "booking-token-1");
   assert.equal(segment.providerEvidence[0].departureToken, "departure-token-1");
+  assert.equal(segment.providerEvidence[0].requestedCarryOnBags, 0);
   assert.equal(segment.providerEvidence[0].cache.status, "cached");
   assert.equal(segment.providerEvidence[0].priceInsights.lowestPrice, 180);
   assert.match(segment.providerEvidence[0].searchLink, /^https:\/\//);

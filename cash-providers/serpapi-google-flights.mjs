@@ -30,6 +30,7 @@ export function buildSerpApiParams({
   adults = 1,
   cabin = "economy",
   maxStops,
+  bags = 0,
   currency = "USD",
   gl,
   hl,
@@ -58,6 +59,7 @@ export function buildSerpApiParams({
     if (returnDate) params.set("return_date", normalizeDate(returnDate));
     params.set("travel_class", mapTravelClass(cabin));
     params.set("adults", String(normalizePositiveInteger(adults, 1)));
+    if (Number(bags) > 0) params.set("bags", String(normalizeNonNegativeInteger(bags, 0)));
     if (maxStops !== undefined && maxStops !== null) {
       params.set("stops", mapStops(maxStops));
     }
@@ -202,6 +204,7 @@ export async function querySerpApiGoogleFlights(options = {}) {
     cabin: searchState.cabinPreference,
     maxStops: searchState.maxStops,
     adults: searchState.passengers?.adults ?? 1,
+    bags: (searchState.carryOnBagsPerTraveler ?? 1) * (searchState.passengers?.adults ?? 1),
     requestBudget,
     nearbyAirportMaxGroundTravelMinutes: searchState.nearbyAirportMaxGroundTravelMinutes,
     noCache,
@@ -477,6 +480,7 @@ function mapFlightToSegment(flight, request, metadata) {
     priceInsights: metadata.priceInsights,
     cache: metadata.cache,
     retrievedAt: metadata.retrievedAt,
+    requestedCarryOnBags: normalizeNonNegativeInteger(request.bags, 0),
     baggage: metadata.baggage,
     bookingOptions: metadata.bookingOptions,
     bookingLinks: metadata.bookingLinks,
@@ -726,6 +730,11 @@ function boundedStrings(value, limit, maxLength) {
 function normalizePositiveInteger(value, fallback) {
   const number = Number(value);
   return Number.isInteger(number) && number > 0 ? number : fallback;
+}
+
+function normalizeNonNegativeInteger(value, fallback) {
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 ? number : fallback;
 }
 
 function normalizePositiveNumber(value) {

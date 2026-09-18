@@ -39,6 +39,8 @@ export function normalizeSearchState(input = {}) {
     passengers: {
       adults: normalizeInteger(passengers.adults ?? input.adultTravelers, 1),
     },
+    carryOnBagsPerTraveler: normalizeInteger(input.carryOnBagsPerTraveler, 1),
+    carryOnFallbackFeeDollars: normalizeNumber(input.carryOnFallbackFeeDollars, 60),
     minStayNights: normalizeInteger(input.minStayNights, 1),
     maxStayNights: normalizeInteger(input.maxStayNights, 7),
     departureTimePreference: normalizeChoice(input.departureTimePreference, "any"),
@@ -134,6 +136,14 @@ export function validateSearchState(searchState) {
 
   if (!Number.isInteger(searchState.passengers.adults) || searchState.passengers.adults < 1) {
     errors.push("Adult travelers must be at least 1.");
+  }
+
+  if (![0, 1].includes(searchState.carryOnBagsPerTraveler)) {
+    errors.push("Carry-on bags per traveler must be 0 or 1.");
+  }
+
+  if (searchState.carryOnFallbackFeeDollars < 0) {
+    errors.push("Carry-on fallback fee cannot be negative.");
   }
 
   if (!ALLOWED_TIME_PREFERENCES.has(searchState.departureTimePreference)) {

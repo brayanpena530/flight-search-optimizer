@@ -89,7 +89,7 @@
             </label>
           </div>
 
-          <div class="grid two-up">
+          <div class="grid three-up">
             <label>
               <span>Preferred cabin</span>
               <select name="cabinPreference">
@@ -98,6 +98,17 @@
                 <option value="premium-economy">Premium economy</option>
                 <option value="business">Business</option>
               </select>
+            </label>
+            <label>
+              <span>Carry-on bags per traveler</span>
+              <select name="carryOnBagsPerTraveler">
+                <option value="1" selected>1 carry-on</option>
+                <option value="0">No carry-on</option>
+              </select>
+            </label>
+            <label>
+              <span>Fallback carry-on fee ($/leg)</span>
+              <input name="carryOnFallbackFeeDollars" type="number" min="0" step="1" value="60" required />
             </label>
           </div>
 

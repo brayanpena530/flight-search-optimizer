@@ -63,6 +63,13 @@ Each candidate carries `optionId`, `route`, `dates`, `effectiveCost`,
 `pointsUsed`, `centsPerPoint`, and a per-leg `breakdown`. Lead with
 `effectiveCost` and `payment.method`; that pair is the actual recommendation.
 
+Each candidate also carries `carryOn`. Report its overall `status` (`included`,
+`fee-required`, `unknown`, or `not-requested`), `estimatedTotalCost`, and any
+leg whose allowance is not included. Treat `confidence: confirmed` as
+provider-reported, `inferred` as the versioned airline/fare fallback, and
+`uncertain` as requiring verification. Known carry-on estimates are already
+included in cash outlay and effective cost; do not add them a second time.
+
 For every option you report, include the airline, flight number(s), outbound
 and return airports, local departure and arrival times, stops, and duration
 from `flightDetails.outbound` and `flightDetails.return`. Also include the
@@ -103,6 +110,8 @@ reading; the default is compact for machine parsing.
   "minStayNights": 3,
   "maxStayNights": 7,
   "cabinPreference": "economy",
+  "carryOnBagsPerTraveler": 1,
+  "carryOnFallbackFeeDollars": 60,
   "maxStops": 1,
   "rankingFocus": "cash-first",
   "dataStrategy": "official-first",
@@ -119,6 +128,9 @@ Enumerations (anything else fails validation):
 - `tripType`: `round-trip` | `one-way`
 - `cabinPreference`: `any` | `economy` | `premium-economy` | `business`
 - `rankingFocus`: `cash-first` | `effective-cost` | `fastest`
+- `carryOnBagsPerTraveler`: `0` | `1` (defaults to `1`); SerpApi receives the
+  total requested bag count and the optimizer applies provider evidence or its
+  airline/fare fallback to cash and award options.
 - `dataStrategy`: `official-first` | `official-then-automation` | `sample-only`
 - `awardDataMode`: `cash-and-awards` | `cash-only`
 - `awardPrograms` / airline `balances` keys: `united`, `delta`, `jetblue`,
